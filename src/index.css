@@ -1,0 +1,204 @@
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Blueprint.dev Design System */
+
+    /* Backgrounds */
+    --bg-canvas: 240 10% 4%;     /* #09090b */
+    --bg-surface: 240 6% 10%;    /* #18181b */
+    --bg-elevated: 240 5% 15%;
+    --bg-overlay: 240 5% 8%;
+
+    /* Borders */
+    --border-subtle: 240 6% 15%;
+    --border-default: 240 5% 20%;
+    --border-emphasis: 240 5% 30%;
+
+    /* Text */
+    --text-primary: 0 0% 100%;
+    --text-secondary: 240 5% 65%;
+    --text-muted: 240 5% 50%;
+    --text-code: 24 100% 65%;
+
+    /* Accents (Neo Orange Theme) */
+    --accent-orange: 16 100% 50%; /* Vibrant Neo Orange */
+    --accent-orange-dim: 16 100% 20%;
+    --accent-green: 142 71% 45%;
+    --accent-green-dim: 150 60% 20%;
+    --accent-blue: 217 91% 60%;
+    --accent-red: 0 84% 60%;
+    --accent-yellow: 48 96% 47%;
+
+    /* Glow */
+    --glow-orange: 16 100% 50%;
+
+    /* Map to shadcn tokens */
+    --background: var(--bg-canvas);
+    --foreground: var(--text-primary);
+    --card: var(--bg-surface);
+    --card-foreground: var(--text-primary);
+    --popover: var(--bg-elevated);
+    --popover-foreground: var(--text-primary);
+    --primary: var(--accent-orange);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--bg-elevated);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--bg-overlay);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--bg-elevated);
+    --accent-foreground: var(--text-primary);
+    --destructive: var(--accent-red);
+    --destructive-foreground: 0 0% 100%;
+    --border: var(--border-default);
+    --input: var(--border-default);
+    --ring: var(--accent-orange);
+    --radius: 0.5rem;
+
+    --sidebar-background: var(--bg-surface);
+    --sidebar-foreground: var(--text-secondary);
+    --sidebar-primary: var(--accent-orange);
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: var(--bg-elevated);
+    --sidebar-accent-foreground: var(--text-primary);
+    --sidebar-border: var(--border-subtle);
+    --sidebar-ring: var(--accent-orange);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    /* CHANGED THIS LINE TO SATOSHI */
+    font-family: 'Satoshi', 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Satoshi', 'Inter', system-ui, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(hsl(var(--border-subtle) / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border-subtle) / 0.3) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .text-gradient-orange {
+    background: linear-gradient(135deg, hsl(var(--accent-orange)), hsl(var(--accent-yellow)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-strike-animated {
+    display: inline;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    background-image: linear-gradient(transparent calc(45% - 1px), #ef4444 calc(45% - 1px), #ef4444 calc(45% + 2px), transparent calc(45% + 2px));
+    background-size: 0% 100%;
+    background-repeat: no-repeat;
+    background-position: left center;
+  }
+  
+  .text-strike-animated.struck {
+    background-size: 100% 100%;
+  }
+
+  .glow-orange {
+    box-shadow: 0 0 40px hsl(var(--accent-orange) / 0.12);
+  }
+
+  .glow-orange-strong {
+    box-shadow: 0 0 60px hsl(var(--accent-orange) / 0.2);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  /* Custom high-contrast scrollbar matching the screenshot reference */
+  /* Target any scrollable element inside the black-themed Demo container */
+  .bg-black .overflow-y-auto::-webkit-scrollbar,
+  .bg-black .overflow-auto::-webkit-scrollbar,
+  .bg-black .custom-scrollbar::-webkit-scrollbar {
+    width: 14px !important;
+    display: block !important;
+  }
+
+  .bg-black .overflow-y-auto::-webkit-scrollbar-track,
+  .bg-black .overflow-auto::-webkit-scrollbar-track,
+  .bg-black .custom-scrollbar::-webkit-scrollbar-track {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  .bg-black .overflow-y-auto::-webkit-scrollbar-thumb,
+  .bg-black .overflow-auto::-webkit-scrollbar-thumb,
+  .bg-black .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #64748b !important;
+    border-radius: 20px !important;
+    border: 2px solid #ffffff !important;
+  }
+
+  .bg-black .overflow-y-auto::-webkit-scrollbar-thumb:hover,
+  .bg-black .overflow-auto::-webkit-scrollbar-thumb:hover,
+  .bg-black .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #475569 !important;
+  }
+
+  /* Scrollbar buttons (arrows) */
+  .bg-black .overflow-y-auto::-webkit-scrollbar-button:single-button,
+  .bg-black .overflow-auto::-webkit-scrollbar-button:single-button,
+  .bg-black .custom-scrollbar::-webkit-scrollbar-button:single-button {
+    background-color: #ffffff !important;
+    display: block !important;
+    border-style: solid !important;
+    height: 14px !important;
+    width: 14px !important;
+  }
+
+  /* Up arrow button */
+  .bg-black .overflow-y-auto::-webkit-scrollbar-button:single-button:vertical:decrement,
+  .bg-black .overflow-auto::-webkit-scrollbar-button:single-button:vertical:decrement,
+  .bg-black .custom-scrollbar::-webkit-scrollbar-button:single-button:vertical:decrement {
+    border-width: 0 5px 6px 5px !important;
+    border-color: transparent transparent #475569 transparent !important;
+    background-position: center !important;
+  }
+
+  /* Down arrow button */
+  .bg-black .overflow-y-auto::-webkit-scrollbar-button:single-button:vertical:increment,
+  .bg-black .overflow-auto::-webkit-scrollbar-button:single-button:vertical:increment,
+  .bg-black .custom-scrollbar::-webkit-scrollbar-button:single-button:vertical:increment {
+    border-width: 6px 5px 0 5px !important;
+    border-color: #475569 transparent transparent transparent !important;
+    background-position: center !important;
+  }
+
+  /* Ensure the containers have overflow-y-auto and a proper height */
+  .bg-black.border-zinc-800.rounded-xl.flex main .flex-1.flex.flex-col {
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+}
