@@ -20,7 +20,7 @@ export async function generateJSONResponse<T>(
   }
 
   // Exclusive model as requested
-  const modelName = "gemini-3.1-flash-lite-preview";
+  const modelName = "gemini-3.1-flash-lite";
 
   let parts = [];
   if (typeof userPromptOrFile === "string") {
