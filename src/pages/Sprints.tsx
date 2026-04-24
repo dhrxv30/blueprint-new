@@ -148,6 +148,20 @@ export default function Sprints() {
       } catch (err) {
         console.error("Failed to update task status on server", err);
       }
+
+      // Also sync to ClickUp if linked
+      const profileId = localStorage.getItem("profileId") || "";
+      if (profileId) {
+        try {
+          await fetch(`http://localhost:5000/api/clickup/sync-task`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profileId, projectId, localTaskId: draggedTaskId, status: newStatus })
+          });
+        } catch {
+          // Silently ignore — ClickUp may not be linked
+        }
+      }
     }
     
     setDraggedTaskId(null);
@@ -180,8 +194,8 @@ export default function Sprints() {
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Sync Failed",
-        description: "Could not sync to ClickUp. Ensure backend is running."
+        title: "Navigation Failed",
+        description: "Could not open ClickUp integration page."
       });
     }
   };

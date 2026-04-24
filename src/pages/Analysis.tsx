@@ -9,7 +9,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast";
 import { FileText, ListTodo, Zap, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { calculateCompleteness, calculateComplexity, calculateTimelineWeeks, normalizeHealthScore } from "@/lib/projectMetrics";
-import { BACKEND_BASE } from "@/lib/config";
 
 interface ParsedData {
   projectName: string;

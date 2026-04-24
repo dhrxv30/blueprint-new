@@ -1,16 +1,13 @@
 // src/pages/ClickUpCallback.tsx
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import { useToast } from "@/hooks/use-toast";
+// Fallback handler — the real OAuth callback now goes through the backend.
+// If a user lands here, we just redirect them to the automation page.
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { BACKEND_BASE } from "@/lib/config";
 
 export default function ClickUpCallback() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [status, setStatus] = useState("Connecting to ClickUp...");
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -72,8 +69,8 @@ export default function ClickUpCallback() {
   return (
     <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-950 text-white font-satoshi">
       <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-      <h2 className="text-xl font-bold">{status}</h2>
-      <p className="text-zinc-500 mt-2">Please wait while we finalize your integration.</p>
+      <h2 className="text-xl font-bold">Redirecting...</h2>
+      <p className="text-zinc-500 mt-2">Taking you back to integrations.</p>
     </div>
   );
 }
