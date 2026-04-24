@@ -36,12 +36,8 @@ type WebhookRegistrationResult = {
   webhookId?: number;
 };
 
-function getWebhookBaseUrl(): string {
-  const baseUrl = process.env.WEBHOOK_BASE_URL;
-  if (!baseUrl) {
-    throw new Error("WEBHOOK_BASE_URL is missing. Set it in backend .env.");
-  }
-  return baseUrl;
+function getWebhookBaseUrl(): string | null {
+  return process.env.WEBHOOK_BASE_URL || null;
 }
 
 function axiosMessage(error: unknown): string {
@@ -211,6 +207,11 @@ export async function createRepositoryForProfile(input: {
 
 export async function ensureGitHubPushWebhook(owner: string, repo: string, token: string): Promise<WebhookRegistrationResult> {
   const webhookBase = getWebhookBaseUrl();
+  if (!webhookBase) {
+    console.log("[GitHub] Skipping webhook registration: WEBHOOK_BASE_URL is not set.");
+    return { created: false };
+  }
+  
   const url = `${webhookBase}/webhooks/github`;
   const secret = process.env.GITHUB_WEBHOOK_SECRET || "";
 
