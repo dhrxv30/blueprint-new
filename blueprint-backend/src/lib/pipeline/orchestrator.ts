@@ -220,10 +220,11 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
                   label: { type: Type.STRING }, 
                   type: { type: Type.STRING }, 
                   description: { type: Type.STRING },
+                  relatedTaskIds: { type: Type.ARRAY, items: { type: Type.STRING }, description: "IDs of TASK-XXX that this node implements" },
                   parentId: { type: Type.STRING },
                   style: { type: Type.OBJECT, properties: { backgroundColor: { type: Type.STRING } } }
                 }, 
-                required: ["id", "label", "type", "description"] 
+                required: ["id", "label", "type", "description", "relatedTaskIds"] 
               } 
             },
             edges: { 
@@ -246,7 +247,19 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
         return await routeTask<Architecture>(
           "Architecture",
           SYSTEM_PROMPTS.ARCHITECTURE_GENERATOR,
-          `Features:\n${features.map(f=>f.name).join(", ")}\n\nTasks:\n${tasks.map(t=>t.title).join(", ")}`,
+          `
+PROJECT CONTEXT FOR ARCHITECTURAL DESIGN:
+
+FEATURES TO IMPLEMENT:
+${features.map(f => `[${f.id}] ${f.name}: ${f.description}`).join("\n")}
+
+TECHNICAL TASKS & REQUIREMENTS:
+${tasks.map(t => `[${t.id}] ${t.title}: ${t.description} (Priority: ${t.priority}, Complexity: ${t.complexity})`).join("\n")}
+
+INSTRUCTIONS:
+Design a high-level system architecture that satisfies all feature requirements and provides a foundation for the listed tasks. 
+Ensure every component in the architecture can be traced back to at least one TASK-ID.
+          `,
           schema
         );
       }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<Architecture>)),
@@ -278,6 +291,7 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
                         type: Type.OBJECT, 
                         properties: { 
                             id: { type: Type.STRING },
+                            taskId: { type: Type.STRING, description: "The TASK-XXX ID this test covers" },
                             method: { type: Type.STRING },
                             endpoint: { type: Type.STRING },
                             description: { type: Type.STRING },
@@ -285,7 +299,7 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
                             status: { type: Type.STRING },
                             category: { type: Type.STRING }
                         }, 
-                        required: ["id", "method", "endpoint", "description", "expected", "status", "category"] 
+                        required: ["id", "taskId", "method", "endpoint", "description", "expected", "status", "category"] 
                     } 
                 },
                 postmanCollection: { type: Type.OBJECT }
@@ -339,7 +353,7 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
     // Stage 7: Deterministic Post-Processing
     console.log("-> Running Deterministic Post-Processing...");
     const sprints = generateSprints(tasks || []);
-    const traceability = buildTraceability(features || [], stories || [], tasks || []);
+    const traceability = buildTraceability(features || [], stories || [], tasks || [], architecture || null, codeFiles || []);
     const codeStructure = buildFileTree(codeFiles || []);
 
     // Persist final result to PipelineAnalysis (Compatibility layer)

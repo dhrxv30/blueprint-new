@@ -3,11 +3,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
   Maximize2,
-  LayoutDashboard
+  LayoutDashboard,
+  X
 } from "lucide-react";
 import {
   ReactFlow,
@@ -26,6 +28,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Import Custom Components
 import { UnifiedNode } from "@/components/architecture/UnifiedNode";
@@ -79,14 +82,25 @@ const getLayoutedElements = (nodes: any[], edges: any[]) => {
     const laneId = node.parentId || 'lane-app';
     const config = LANE_CONFIG[laneId] || LANE_CONFIG['lane-app'];
 
+    // Calculate horizontal variety within the lane based on dagre's rank (pos.x)
+    // We group by rank to avoid overlap
+    const laneNodes = contentNodes.filter(n => (n.parentId || 'lane-app') === laneId);
+    const uniqueX = Array.from(new Set(laneNodes.map(n => g.node(n.id).x))).sort((a, b) => a - b);
+    const rankIndex = uniqueX.indexOf(pos.x);
+    const rankCount = uniqueX.length;
+
+    // Distribute ranks evenly across the lane width
+    const padding = 60;
+    const availableWidth = config.w - 240; // 240 is approx node width + margin
+    const xOffset = rankCount > 1 
+      ? (rankIndex / (rankCount - 1)) * availableWidth + padding
+      : (config.w / 2) - 100;
+
     return {
       ...node,
       position: { 
-        // We use the static lane X, but center the node within it
-        x: (config.w / 2) - 100, 
-        // Use the GLOBAL Y from dagre to ensure cross-lane alignment
-        // (Offset by 100 for the lane header)
-        y: pos.y + 100
+        x: xOffset, 
+        y: pos.y + 80 // Reduced offset for header
       },
     };
   });
@@ -119,6 +133,7 @@ const AntigravityEdge = ({
   markerEnd,
   label,
   data,
+  selected,
 }: EdgeProps) => {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -130,13 +145,32 @@ const AntigravityEdge = ({
     borderRadius: 20,
   });
 
+  const isHighlighted = (data as any)?.isHighlighted || selected;
+
   return (
     <>
       <BaseEdge 
+        id={id}
         path={edgePath} 
         markerEnd={markerEnd} 
-        style={{ ...style, strokeWidth: 1.5, stroke: style.stroke || '#52525b' }} 
+        style={{ 
+          ...style, 
+          strokeWidth: isHighlighted ? 2.5 : 1.5, 
+          stroke: isHighlighted ? '#ffffff' : (style.stroke || '#27272a'),
+          opacity: isHighlighted ? 1 : (style.opacity || 0.3),
+          transition: 'all 0.5s ease',
+        }} 
       />
+      
+      {/* SEMANTIC FLOW PARTICLES */}
+      <circle r={isHighlighted ? "2.5" : "1.5"} fill={isHighlighted ? "#ffffff" : "#52525b"} style={{ filter: 'blur(1px)' }}>
+        <animateMotion 
+          dur={isHighlighted ? "1.5s" : "4s"} 
+          repeatCount="indefinite" 
+          path={edgePath} 
+        />
+      </circle>
+
       {label && (
         <EdgeLabelRenderer>
           <div
@@ -147,16 +181,11 @@ const AntigravityEdge = ({
               fontWeight: 900,
               pointerEvents: 'none',
             }}
-            className="px-2 py-1 bg-black border border-white/10 rounded text-zinc-500 uppercase tracking-tighter"
+            className={`px-2 py-1 bg-black border rounded uppercase tracking-tighter transition-colors duration-500 ${isHighlighted ? 'border-white/40 text-white' : 'border-white/10 text-zinc-600'}`}
           >
             {label}
           </div>
         </EdgeLabelRenderer>
-      )}
-      {data?.animated && (
-        <circle r="2" fill="#ffffff" filter="blur(1px)">
-          <animateMotion dur="2s" repeatCount="indefinite" path={edgePath} />
-        </circle>
       )}
     </>
   );
@@ -177,7 +206,7 @@ function ArchitectureContent() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -266,9 +295,16 @@ function ArchitectureContent() {
       })).filter((e: any) => e.source && e.target);
 
       const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(finalNodes, rawEdges);
+      
+      // Initially set all edges to be slightly animated but subtle
+      const initialEdges = layoutedEdges.map(e => ({
+        ...e,
+        data: { ...e.data, isHighlighted: false }
+      }));
+
       setNodes(layoutedNodes);
-      setEdges(layoutedEdges);
-      setTimeout(() => fitView({ padding: 0.2, duration: 1000 }), 200);
+      setEdges(initialEdges);
+      setTimeout(() => fitView({ padding: 0.1, duration: 1000 }), 200);
     } catch (e) {
       console.error(e);
     } finally {
@@ -276,24 +312,95 @@ function ArchitectureContent() {
     }
   }, [projectId, fitView, toast, setNodes, setEdges]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { 
+    loadData().then(() => {
+      const focusId = searchParams.get("focus");
+      if (focusId) {
+        // Give time for nodes to be set and layouted
+        setTimeout(() => {
+          const node = nodes.find(n => n.id === focusId);
+          if (node) {
+            setSelectedNode(node);
+            performAnalysis(node.id);
+          }
+        }, 1200);
+      }
+    }); 
+  }, [loadData, searchParams]);
 
-  const onNodeMouseEnter = useCallback((_: any, node: any) => {
-    if (node.type === 'unified') setHoveredNodeId(node.id);
-  }, []);
+  // SEMANTIC TRACING LOGIC
+  const performAnalysis = useCallback((nodeId: string) => {
+    const affectedNodeIds = new Set<string>();
+    const affectedEdgeIds = new Set<string>();
 
-  const onNodeMouseLeave = useCallback(() => setHoveredNodeId(null), []);
+    const traverse = (id: string, visited: Set<string>) => {
+      if (visited.has(id)) return;
+      visited.add(id);
+      affectedNodeIds.add(id);
+      
+      edges.forEach(edge => {
+        if (edge.source === id) {
+          affectedEdgeIds.add(edge.id);
+          traverse(edge.target, visited);
+        }
+        if (edge.target === id) {
+          affectedEdgeIds.add(edge.id);
+          traverse(edge.source, visited);
+        }
+      });
+    };
 
-  const processedEdges = useMemo(() => {
-    if (!hoveredNodeId) return edges;
-    return edges.map(e => {
-      const isConnected = e.source === hoveredNodeId || e.target === hoveredNodeId;
+    traverse(nodeId, new Set());
+
+    setNodes(nds => nds.map(n => {
+      if (n.type === 'lane') return n;
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          highlighted: affectedNodeIds.has(n.id),
+          dimmed: !affectedNodeIds.has(n.id)
+        }
+      };
+    }));
+
+    setEdges(eds => eds.map(e => {
+      const isAffected = affectedEdgeIds.has(e.id);
       return {
         ...e,
-        style: { ...e.style, stroke: isConnected ? '#ffffff' : '#18181b', strokeWidth: isConnected ? 2 : 1, opacity: isConnected ? 1 : 0.1 }
+        data: { ...e.data, isHighlighted: isAffected },
+        style: {
+          ...e.style,
+          stroke: isAffected ? '#ffffff' : '#18181b',
+          strokeWidth: isAffected ? 2.5 : 1,
+          opacity: isAffected ? 1 : 0.05
+        }
       };
-    });
-  }, [edges, hoveredNodeId]);
+    }));
+  }, [edges, setNodes, setEdges]);
+
+  const resetAnalysis = useCallback(() => {
+    setNodes(nds => nds.map(n => ({
+      ...n,
+      data: { ...n.data, highlighted: false, dimmed: false }
+    })));
+    setEdges(eds => eds.map(e => ({
+      ...e,
+      data: { ...e.data, isHighlighted: false },
+      style: { ...e.style, stroke: '#27272a', strokeWidth: 1.5, opacity: 0.3 }
+    })));
+  }, [setNodes, setEdges]);
+
+  const onNodeClick = useCallback((_: any, node: any) => {
+    if (node.type === 'lane') return;
+    setSelectedNode(node);
+    performAnalysis(node.id);
+  }, [performAnalysis]);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
+    resetAnalysis();
+  }, [resetAnalysis]);
 
   if (loading) return (
     <DashboardLayout>
@@ -322,22 +429,91 @@ function ArchitectureContent() {
         </div>
       </div>
 
-      <div className="h-[calc(100vh-14rem)] bg-[#030303] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl relative">
-        <ReactFlow
-          nodes={nodes}
-          edges={processedEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeMouseEnter={onNodeMouseEnter}
-          onNodeMouseLeave={onNodeMouseLeave}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          colorMode="dark"
-          fitView
-        >
-          <Background variant={BackgroundVariant.Dots} gap={40} size={1} color="#111" />
-          <Controls className="!bg-zinc-900 !border-white/5 !fill-white rounded-xl translate-x-4 -translate-y-4" />
-        </ReactFlow>
+      <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-14rem)]">
+        <div className="flex-1 bg-[#030303] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl relative">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            colorMode="dark"
+            fitView
+          >
+            <Background variant={BackgroundVariant.Dots} gap={40} size={1} color="#111" />
+            <Controls className="!bg-zinc-900 !border-white/5 !fill-white rounded-xl translate-x-4 -translate-y-4" />
+          </ReactFlow>
+        </div>
+
+        <AnimatePresence>
+          {selectedNode && (
+            <motion.div 
+              initial={{ x: 300, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 300, opacity: 0 }}
+              className="w-full lg:w-80 bg-zinc-900 border border-white/5 rounded-[2rem] overflow-hidden flex flex-col shadow-2xl"
+            >
+              <div className="p-6 border-b border-white/5 bg-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tighter">System Node</h3>
+                </div>
+                <button onClick={onPaneClick} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <X className="w-4 h-4 text-zinc-500" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                <div>
+                  <Badge variant="outline" className="border-white/10 text-zinc-500 text-[10px] uppercase mb-2">
+                    {selectedNode.data.type}
+                  </Badge>
+                  <h2 className="text-2xl font-bold text-white tracking-tight leading-tight">
+                    {selectedNode.data.label}
+                  </h2>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Responsibility</span>
+                      <LayoutDashboard className="w-3 h-3 text-zinc-700" />
+                    </div>
+                    <p className="text-sm text-zinc-400 leading-relaxed">
+                      {selectedNode.data.description || "Core architectural component responsible for handling system-level operations and data flow management."}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t border-white/5">
+                    <h4 className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Topology Impact</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                        <p className="text-[10px] text-zinc-600 uppercase mb-1">Fan-In</p>
+                        <p className="text-lg font-bold text-white">3</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                        <p className="text-[10px] text-zinc-600 uppercase mb-1">Fan-Out</p>
+                        <p className="text-lg font-bold text-white">2</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-6">
+                  <Button 
+                    onClick={() => navigate(`/dashboard/traceability?projectId=${projectId}&focus=${selectedNode.id}`)}
+                    className="w-full bg-white text-black hover:bg-zinc-200 font-bold rounded-xl h-12"
+                  >
+                    Inspect Dependencies
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </DashboardLayout>
   );

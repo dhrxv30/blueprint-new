@@ -10,6 +10,7 @@ import { PrismaClient } from "@prisma/client";
 import { processPrdJob } from "./src/lib/pipeline/orchestrator.js";
 import { createRepo, pushFiles } from "./src/lib/integrations/github.js";
 import { syncSprint } from "./src/lib/integrations/clickup.js";
+import { buildTraceability } from "./src/lib/pipeline/traceabilityGenerator.js";
 import githubRouter from "./src/routes/github.js";
 import clickupRouter from "./src/routes/clickup.js";
 import githubWebhookRouter from "./src/webhooks/githubWebhook.js";
@@ -322,27 +323,37 @@ app.put("/api/projects/:projectId/tasks/:taskId/status", async (req, res) => {
 });
 
 /**
- * 3. Fetch traceability graph
+ * 3. Fetch traceability graph (Dynamic Reconstruction)
  */
 app.get("/api/projects/:projectId/traceability", async (req, res) => {
   try {
     const analysis = await prisma.pipelineAnalysis.findFirst({
-      where: {
-        prdVersion: {
-          projectId: req.params.projectId,
-        },
-      },
+      where: { prdVersion: { projectId: req.params.projectId } },
+      orderBy: { createdAt: "desc" }
     });
 
-    if (!analysis || !analysis.traceability) {
-      return res.status(404).json({
-        error: "No traceability found",
-      });
-    }
+    if (!analysis) return res.status(404).json({ error: "No analysis found" });
 
-    res.json(analysis.traceability);
+    const features = Array.isArray(analysis.features) ? (analysis.features as any[]) : [];
+    const stories = Array.isArray(analysis.stories) ? (analysis.stories as any[]) : [];
+    const tasks = Array.isArray(analysis.tasks) ? (analysis.tasks as any[]) : [];
+    const architecture = analysis.architecture ? JSON.parse(analysis.architecture as string) : null;
+    
+    // Flatten code structure
+    const codeFiles: any[] = [];
+    const flatten = (nodes: any[]) => {
+      nodes.forEach(n => {
+        if (n.type === "file") codeFiles.push(n);
+        else if (n.children) flatten(n.children);
+      });
+    };
+    if (Array.isArray(analysis.codeStructure)) flatten(analysis.codeStructure as any[]);
+
+    const traceability = buildTraceability(features, stories, tasks, architecture, codeFiles);
+    res.json(traceability);
 
   } catch (err: any) {
+    console.error("Traceability Reconstruction Error:", err);
     res.status(500).json({ error: err.message });
   }
 });

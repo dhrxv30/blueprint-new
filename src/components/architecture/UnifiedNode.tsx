@@ -64,10 +64,13 @@ export const UnifiedNode = ({ data, selected }: NodeProps) => {
           <h3 className={`text-[11px] font-black tracking-tight leading-tight uppercase ${selected ? "text-black" : "text-white"}`}>
             {data.label as string}
           </h3>
-          {data.description && (
-            <p className={`text-[8px] mt-1 font-medium opacity-50 ${selected ? "text-black" : "text-zinc-400"}`}>
-              {(data.description as string).split(' ').slice(0, 3).join(' ')}
-            </p>
+          {(data.tech || data.type) && (
+            <div className={`
+              mt-1.5 px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest inline-block
+              ${selected ? "bg-black/10 text-black" : "bg-white/5 text-zinc-500 border border-white/10"}
+            `}>
+              {(data.tech as string) || (data.type as string)}
+            </div>
           )}
         </div>
       </div>

@@ -185,7 +185,7 @@ export default function Sprints() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectId: "demo-project-123",
+          projectId: projectId || "demo-project-123",
           sprint: { name: "Sprint 1", tasks: tasks.map(t => t.id) }
         })
       });
@@ -221,7 +221,7 @@ export default function Sprints() {
             className="h-6 w-6 text-zinc-500 hover:text-white -mr-2 -mt-2"
             onClick={(e) => {
               e.stopPropagation();
-              toast({ title: "Task Options", description: `Opening settings for ${task.id}...` });
+              navigate(`/dashboard/overview?projectId=${projectId}&taskId=${task.id}`);
             }}
           >
             <MoreHorizontal className="w-4 h-4" />

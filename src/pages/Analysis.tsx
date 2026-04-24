@@ -9,6 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast";
 import { FileText, ListTodo, Zap, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { calculateCompleteness, calculateComplexity, calculateTimelineWeeks, normalizeHealthScore } from "@/lib/projectMetrics";
+import { BACKEND_BASE } from "@/lib/config";
 
 interface ParsedData {
   projectName: string;
@@ -134,7 +135,7 @@ export default function Analysis() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${(data.projectName || "analysis").replace(/\\s+/g, "-").toLowerCase()}-report.json`;
+    link.download = `${(data.projectName || "analysis").replace(/\s+/g, "-").toLowerCase()}-report.json`;
     link.click();
     URL.revokeObjectURL(url);
     toast({ title: "Report Exported", description: "Downloaded analysis report as JSON." });

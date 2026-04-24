@@ -98,7 +98,11 @@ export default function Dashboard() {
   };
 
   const handleViewAll = (section: string) => {
-    toast({ title: `Opening ${section}`, description: "This feature is coming in the next update." });
+    if (section === "Active Projects") {
+        setIsDialogOpen(true);
+    } else if (section === "Recent Activity") {
+        toast({ title: "Activity Logs", description: "Activity logs are being aggregated from pipeline jobs." });
+    }
   };
 
   const handlePRDAction = (projectId: string, action: string) => {
