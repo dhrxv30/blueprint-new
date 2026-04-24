@@ -51,6 +51,11 @@ export default function Processing() {
         if (data.status === "COMPLETED") {
           setIsComplete(true);
           toast({ title: "Analysis Complete", description: "Your project is ready!" });
+          if (searchParams.get("autoRedirect") === "true") {
+            setTimeout(() => {
+              navigate(`/dashboard/analysis?projectId=${projectId}`);
+            }, 1000); // Small delay to let the user see the complete state briefly
+          }
         } else if (data.status === "FAILED") {
           setError(data.error || "Generation failed. Please try again.");
         }

@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "predev": "npx prisma db push",
-    "dev": "tsx server.ts"
+    "dev": "tsx watch server.ts"
   },
   "keywords": [],
   "author": "",

@@ -12,6 +12,7 @@ import { createRepo, pushFiles } from "./src/lib/integrations/github.js";
 import { syncSprint } from "./src/lib/integrations/clickup.js";
 import githubRouter from "./src/routes/github.js";
 import clickupRouter from "./src/routes/clickup.js";
+import ambiguityRouter from "./src/routes/ambiguity.js";
 import githubWebhookRouter from "./src/webhooks/githubWebhook.js";
 import clickupWebhookRouter from "./src/webhooks/clickupWebhook.js";
 dotenv.config({ debug: true, override: true });
@@ -54,6 +55,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.use("/api/github", githubRouter);
 app.use("/api/clickup", clickupRouter);
+app.use("/api", ambiguityRouter);
 app.use("/webhooks", githubWebhookRouter);
 app.use("/webhooks", clickupWebhookRouter);
 

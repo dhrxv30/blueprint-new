@@ -1,11 +1,14 @@
 // src/pages/Chat.tsx
 import { useState, useRef, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, Bot, AlertCircle } from "lucide-react";
+import { Send, AlertCircle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { BACKEND_BASE } from "@/lib/config";
 
 type Message = {
@@ -13,77 +16,121 @@ type Message = {
   role: "ai" | "user";
   content: string;
   timestamp: string;
+  ambiguityId?: string;
+};
+
+type AmbiguityStatus = {
+  total: number;
+  resolved: number;
+  pending: number;
+  allResolved: boolean;
 };
 
 export default function Chat() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("projectId");
+  const { toast } = useToast();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [currentAmbiguityId, setCurrentAmbiguityId] = useState<string | null>(null);
+  const [status, setStatus] = useState<AmbiguityStatus | null>(null);
+  const [allDone, setAllDone] = useState(false);
+  const [contextInput, setContextInput] = useState("");
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  /*
-  ===============================
-  Load clarifications from pipeline
-  ===============================
-  */
+  const now = () =>
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  // ============================
+  // Load first ambiguity on mount
+  // ============================
   useEffect(() => {
+    if (!projectId) return;
+    fetchNextAmbiguity();
+    fetchStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
-    const raw = localStorage.getItem("blueprint_project_data");
-
-    if (!raw) return;
-
-    const data = JSON.parse(raw);
-
-    const clarifications = data.clarifications || [];
-
-    const aiMessages: Message[] = clarifications.map((q: any, i: number) => ({
-      id: "ai-" + i,
-      role: "ai",
-      content: q.question || q,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    }));
-
-    setMessages(aiMessages);
-
-  }, []);
-
-  /*
-  ===============================
-  Auto scroll
-  ===============================
-  */
-
+  // ============================
+  // Auto scroll
+  // ============================
   useEffect(() => {
-
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+  }, [messages, isTyping, allDone]);
 
-  }, [messages, isTyping]);
+  // ============================
+  // Fetch next pending ambiguity
+  // ============================
+  const fetchNextAmbiguity = async () => {
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/ambiguities/next?projectId=${projectId}`);
+      const data = await res.json();
 
-  /*
-  ===============================
-  Send message
-  ===============================
-  */
+      if (data.done || !data.ambiguity) {
+        setAllDone(true);
+        setCurrentAmbiguityId(null);
+        // Add a system message
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: "done-" + Date.now(),
+            role: "ai",
+            content: "All ambiguities have been resolved! You can add any additional context below, then click Finalize PRD to re-evaluate.",
+            timestamp: now()
+          }
+        ]);
+        return;
+      }
 
+      setCurrentAmbiguityId(data.ambiguity.id);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: data.ambiguity.id,
+          role: "ai",
+          content: data.ambiguity.question,
+          timestamp: now(),
+          ambiguityId: data.ambiguity.id
+        }
+      ]);
+    } catch (err) {
+      console.error("Failed to fetch next ambiguity:", err);
+    }
+  };
+
+  // ============================
+  // Fetch ambiguity status
+  // ============================
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/ambiguities/status?projectId=${projectId}`);
+      const data = await res.json();
+      setStatus(data);
+      if (data.allResolved) setAllDone(true);
+    } catch (err) {
+      console.error("Failed to fetch status:", err);
+    }
+  };
+
+  // ============================
+  // Handle answer submission
+  // ============================
   const handleSendMessage = async (e?: React.FormEvent) => {
-
     e?.preventDefault();
-
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || !currentAmbiguityId) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
       content: inputValue,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit"
-      })
+      timestamp: now()
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -91,103 +138,170 @@ export default function Chat() {
     setIsTyping(true);
 
     try {
-
-      const raw = localStorage.getItem("blueprint_project_data");
-
-      const context = raw ? JSON.parse(raw) : {};
-
-      const response = await fetch(`${BACKEND_BASE}/api/chat`, {
+      const res = await fetch(`${BACKEND_BASE}/api/ambiguities/answer`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMsg.content,
-          context
+          ambiguityId: currentAmbiguityId,
+          answer: userMsg.content
         })
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "ai",
-        content: data.reply || "AI response unavailable.",
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit"
-        })
-      };
+      if (data.done) {
+        setAllDone(true);
+        setCurrentAmbiguityId(null);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: "done-" + Date.now(),
+            role: "ai",
+            content: "All ambiguities have been resolved! You can add any additional context below, then click Finalize PRD to re-evaluate.",
+            timestamp: now()
+          }
+        ]);
+      } else if (data.next) {
+        setCurrentAmbiguityId(data.next.id);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: data.next.id,
+            role: "ai",
+            content: data.next.question,
+            timestamp: now(),
+            ambiguityId: data.next.id
+          }
+        ]);
+      }
 
-      setMessages((prev) => [...prev, aiMsg]);
-
+      fetchStatus();
     } catch (err) {
-
-      const fallbackMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "ai",
-        content: "⚠️ Backend unavailable or API key exhausted.",
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit"
-        })
-      };
-
-      setMessages((prev) => [...prev, fallbackMsg]);
-
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: "err-" + Date.now(),
+          role: "ai",
+          content: "⚠️ Failed to submit answer. Please try again.",
+          timestamp: now()
+        }
+      ]);
     }
 
     setIsTyping(false);
-
   };
 
-  const handleChipClick = (text: string) => {
-    setInputValue(text);
+  // ============================
+  // Save context and finalize
+  // ============================
+  const handleFinalize = async () => {
+    if (!projectId) return;
+    setIsFinalizing(true);
+
+    try {
+      // Save context if provided
+      if (contextInput.trim()) {
+        await fetch(`${BACKEND_BASE}/api/context/save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, content: contextInput.trim() })
+        });
+      }
+
+      // Trigger PRD finalization
+      const res = await fetch(`${BACKEND_BASE}/api/prd/finalize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId })
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.jobId) {
+        toast({
+          title: "Re-evaluating PRD...",
+          description: "Redirecting to the pipeline processing page."
+        });
+        navigate(`/dashboard/processing?jobId=${data.jobId}&projectId=${projectId}&autoRedirect=true`);
+      } else {
+        throw new Error(data.error || "Finalization failed");
+      }
+    } catch (err: any) {
+      toast({
+        title: "Finalization Failed",
+        description: err.message || "Something went wrong",
+        variant: "destructive"
+      });
+      setIsFinalizing(false);
+    }
   };
+
+  // ============================
+  // No projectId guard
+  // ============================
+  if (!projectId) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
+          <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+          <h2 className="text-2xl font-bold">No Project Selected</h2>
+          <p className="text-zinc-400 mt-2">Please select a project from the dashboard.</p>
+          <Button className="mt-6" onClick={() => navigate("/dashboard")}>Go to Dashboard</Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
-
     <DashboardLayout>
-
       <div className="flex flex-col h-[calc(100vh-8rem)] max-w-4xl mx-auto gap-4">
 
         {/* HEADER */}
-
-        <div>
-
-          <h1 className="text-3xl font-bold text-white tracking-tight">
-            PRD Clarification
-          </h1>
-
-          <p className="text-zinc-400 mt-1 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-500" />
-            Resolve ambiguities detected in the PRD
-          </p>
-
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">
+              PRD Clarification
+            </h1>
+            <p className="text-zinc-400 mt-1 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500" />
+              Resolve ambiguities detected in the PRD
+            </p>
+          </div>
+          {status && status.total > 0 && (
+            <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2">
+              <span className="text-xs text-zinc-500 uppercase font-bold">Progress</span>
+              <span className="text-white font-bold text-lg">
+                {status.resolved}/{status.total}
+              </span>
+              {status.allResolved && <CheckCircle2 className="w-4 h-4 text-green-400" />}
+            </div>
+          )}
         </div>
 
         {/* CHAT CARD */}
-
         <Card className="flex-1 flex flex-col bg-zinc-900 border-zinc-800 overflow-hidden">
-
           <CardHeader className="border-b border-zinc-800 bg-zinc-950/50">
-
             <CardTitle className="text-white text-sm flex items-center gap-2">
-              <Bot className="w-5 h-5 text-primary" />
-              Blueprint AI Architect
+              <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs font-black text-white">
+                B
+              </div>
+              Blueprint.dev
             </CardTitle>
-
           </CardHeader>
 
           {/* MESSAGES */}
-
           <CardContent
             ref={scrollRef}
             className="flex-1 overflow-y-auto p-6 space-y-6"
           >
+            {messages.length === 0 && !allDone && (
+              <div className="flex items-center justify-center h-full text-zinc-500">
+                <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                Loading ambiguities...
+              </div>
+            )}
 
             {messages.map((msg) => (
-
               <div
                 key={msg.id}
                 className={`flex gap-4 max-w-[85%] ${
@@ -196,17 +310,11 @@ export default function Chat() {
                     : ""
                 }`}
               >
-
-                <Avatar className="w-8 h-8 border border-zinc-700">
-
-                  {msg.role === "ai"
-                    ? <Bot className="w-5 h-5 m-auto text-primary" />
-                    : <AvatarImage src="https://github.com/shadcn.png" />}
-
-                  <AvatarFallback>
-                    {msg.role === "ai" ? "AI" : "U"}
+                <Avatar className="w-8 h-8 border border-zinc-700 flex-shrink-0">
+                  <AvatarImage src={msg.role === "ai" ? "/bot-avatar.png" : undefined} />
+                  <AvatarFallback className={msg.role === "ai" ? "bg-primary text-white font-black text-xs" : "bg-zinc-700 text-white font-bold text-xs"}>
+                    {msg.role === "ai" ? "B" : "U"}
                   </AvatarFallback>
-
                 </Avatar>
 
                 <div
@@ -216,7 +324,6 @@ export default function Chat() {
                       : "items-start"
                   }`}
                 >
-
                   <div
                     className={`px-4 py-3 rounded-2xl text-sm leading-relaxed
                     ${
@@ -227,94 +334,85 @@ export default function Chat() {
                   >
                     {msg.content}
                   </div>
-
                   <span className="text-[10px] text-zinc-500 mt-1">
                     {msg.timestamp}
                   </span>
-
                 </div>
-
               </div>
-
             ))}
 
             {isTyping && (
-
               <div className="flex gap-4">
-
                 <Avatar className="w-8 h-8 border border-zinc-700">
-                  <AvatarFallback>AI</AvatarFallback>
+                  <AvatarImage src="/bot-avatar.png" />
+                  <AvatarFallback className="bg-primary text-white font-black text-xs">B</AvatarFallback>
                 </Avatar>
-
                 <div className="bg-zinc-800 border border-zinc-700 px-4 py-3 rounded-xl text-zinc-400 text-sm">
-                  AI thinking...
+                  Blueprint is thinking...
                 </div>
-
               </div>
-
             )}
-
           </CardContent>
 
-          {/* QUICK SUGGESTIONS */}
-
-          <div className="px-6 pb-2 pt-2 bg-zinc-900 flex flex-wrap gap-2">
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                handleChipClick("Let's implement a retry queue for webhook failures.")
-              }
-            >
-              Suggest: Add retry queue
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                handleChipClick("Stripe built-in retries are sufficient for MVP.")
-              }
-            >
-              Suggest: Use Stripe retries
-            </Button>
-
-          </div>
-
-          {/* INPUT */}
-
-          <div className="p-4 bg-zinc-950 border-t border-zinc-800">
-
-            <form
-              onSubmit={handleSendMessage}
-              className="relative flex items-center"
-            >
-
-              <Input
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Type your clarification..."
-                className="pr-12 bg-zinc-900 border-zinc-700 text-white"
-              />
-
+          {/* CONTEXT + FINALIZE (shown when all resolved) */}
+          {allDone && (
+            <div className="px-6 py-4 bg-zinc-950/80 border-t border-zinc-800 space-y-4">
+              <div>
+                <label className="text-xs text-zinc-500 uppercase font-bold mb-2 block">
+                  Additional Context (optional)
+                </label>
+                <Textarea
+                  value={contextInput}
+                  onChange={(e) => setContextInput(e.target.value)}
+                  placeholder="Add any extra context, constraints, or preferences..."
+                  className="bg-zinc-900 border-zinc-700 text-white min-h-[80px] resize-none"
+                />
+              </div>
               <Button
-                type="submit"
-                size="icon"
-                className="absolute right-1.5 h-9 w-9"
-                disabled={!inputValue.trim() || isTyping}
+                onClick={handleFinalize}
+                disabled={isFinalizing}
+                className="w-full bg-primary hover:brightness-110 text-white gap-2 h-12 text-base font-bold"
               >
-                <Send className="w-4 h-4" />
+                {isFinalizing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Re-evaluating PRD...
+                  </>
+                ) : (
+                  <>
+                    Finalize PRD
+                  </>
+                )}
               </Button>
+            </div>
+          )}
 
-            </form>
-
-          </div>
-
+          {/* INPUT (only shown when there are pending ambiguities) */}
+          {!allDone && (
+            <div className="p-4 bg-zinc-950 border-t border-zinc-800">
+              <form
+                onSubmit={handleSendMessage}
+                className="relative flex items-center"
+              >
+                <Input
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Type your clarification..."
+                  className="pr-12 bg-zinc-900 border-zinc-700 text-white"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="absolute right-1.5 h-9 w-9"
+                  disabled={!inputValue.trim() || isTyping || !currentAmbiguityId}
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </form>
+            </div>
+          )}
         </Card>
-
       </div>
-
     </DashboardLayout>
   );
 }
