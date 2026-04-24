@@ -315,66 +315,27 @@ Ensure every component in the architecture can be traced back to at least one TA
       }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<any>)),
 
       runStage<PRDHealth>(jobId, "Health & Ambiguity Analysis", async () => {
-        // Multi-dimensional schema: 5 specific ratings (1-10) instead of 1 vague score
-        // The lite model can't give a reliable single score, but CAN rate specific aspects
         const schema: Schema = {
             type: Type.OBJECT,
             properties: {
-                technicalDepth: { type: Type.INTEGER },
-                requirementClarity: { type: Type.INTEGER },
-                implementationReadiness: { type: Type.INTEGER },
-                scopeDefinition: { type: Type.INTEGER },
-                riskCoverage: { type: Type.INTEGER },
-                issues: { type: Type.ARRAY, items: { type: Type.STRING } },
+                healthScore: {
+                    type: Type.OBJECT,
+                    properties: {
+                        score: { type: Type.INTEGER },
+                        issues: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    },
+                    required: ["score", "issues"]
+                },
                 ambiguities: { type: Type.ARRAY, items: { type: Type.STRING } }
             },
-            required: ["technicalDepth", "requirementClarity", "implementationReadiness", "scopeDefinition", "riskCoverage", "issues", "ambiguities"]
+            required: ["healthScore", "ambiguities"]
         };
-
-        const rawOutput = await routeTask<{
-          technicalDepth: number;
-          requirementClarity: number;
-          implementationReadiness: number;
-          scopeDefinition: number;
-          riskCoverage: number;
-          issues: string[];
-          ambiguities: string[];
-        }>(
+        return await routeTask<PRDHealth>(
             "HealthAnalysis",
             SYSTEM_PROMPTS.PRD_HEALTH_ANALYZER,
-            normalizedText.substring(0, 8000), // Increased context window for better evaluation
+            normalizedText,
             schema
         );
-
-        // Weighted composite: technical depth and clarity matter most
-        const d = rawOutput.data;
-        const compositeScore = d ? Math.round(
-          (d.technicalDepth * 2.5) +
-          (d.requirementClarity * 2.5) +
-          (d.implementationReadiness * 2.0) +
-          (d.scopeDefinition * 1.5) +
-          (d.riskCoverage * 1.5)
-        ) : 0;
-
-        console.log(`\n📊 HEALTH DIMENSIONS:`, {
-          technicalDepth: d?.technicalDepth,
-          requirementClarity: d?.requirementClarity,
-          implementationReadiness: d?.implementationReadiness,
-          scopeDefinition: d?.scopeDefinition,
-          riskCoverage: d?.riskCoverage,
-          compositeScore
-        });
-
-        return {
-           status: rawOutput.status,
-           data: {
-              healthScore: {
-                 score: compositeScore,
-                 issues: d?.issues || []
-              },
-              ambiguities: d?.ambiguities || []
-           }
-        };
       }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<PRDHealth>))
     ]);
 
@@ -382,7 +343,7 @@ Ensure every component in the architecture can be traced back to at least one TA
 
     // We no longer fail the whole job if parallel stages fail.
     // We proceed with whatever data we managed to get.
-    const architecture: Architecture | null = archResult.status === "success" ? archResult.data! : null;
+    const architecture: Architecture = archResult.status === "success" ? archResult.data! : { nodes: [], edges: [] };
     const codeFiles: CodeFile[] = codeResult.status === "success" ? codeResult.data!.codeFiles : [];
     const devops: DevOps = codeResult.status === "success" ? codeResult.data!.devops : { dockerfile: "", githubActions: "", deploymentSteps: [] };
     const tests: any[] = testResult.status === "success" ? testResult.data!.tests : [];
@@ -433,9 +394,8 @@ Ensure every component in the architecture can be traced back to at least one TA
                 }));
                 
                 if (ambiguityObjects.length > 0) {
-                  // Use cast to handle case where Prisma Client hasn't been re-generated yet
-                  await (prisma as any).ambiguity.createMany({
-                    data: ambiguityObjects.map((a: any) => ({
+                  await prisma.ambiguity.createMany({
+                    data: ambiguityObjects.map(a => ({
                       projectId: job.projectId,
                       question: a.question,
                       status: "PENDING"
