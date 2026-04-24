@@ -19,6 +19,9 @@ export async function generateJSONResponse<T>(
     ai = new GoogleGenAI({ apiKey });
   }
 
+  // Exclusive model as requested
+  const modelName = "gemini-3.1-flash-lite-preview";
+
   let parts = [];
   if (typeof userPromptOrFile === "string") {
     parts = [{ text: userPromptOrFile }];
@@ -28,13 +31,10 @@ export async function generateJSONResponse<T>(
     parts = [userPromptOrFile];
   }
 
-  // Exclusive model as requested
-  const modelName = "gemini-3-flash-preview";
-
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       console.log(`\n🤖 AI Inference via ${modelName} (Attempt ${attempt}/${retries})`);
-      
+
       const result = await ai.models.generateContent({
         model: modelName,
         contents: [{ role: "user", parts }],
@@ -50,15 +50,15 @@ export async function generateJSONResponse<T>(
       return JSON.parse(result.text) as T;
 
     } catch (error: any) {
-        const status = error?.status || error?.response?.status;
-        const message = error?.message || "Internal AI Engine Error";
+      const status = error?.status || error?.response?.status;
+      const message = error?.message || "Internal AI Engine Error";
 
-        // Structured logging for debugging
-        console.error(`\n[GEMINI_ENGINE_ERROR] Model: ${modelName} | Attempt: ${attempt}/${retries}`);
-        console.error(`Status: ${status || "N/A"} | Message: ${message}`);
+      // Structured logging for debugging
+      console.error(`\n[GEMINI_ENGINE_ERROR] Model: ${modelName} | Attempt: ${attempt}/${retries}`);
+      console.error(`Status: ${status || "N/A"} | Message: ${message}`);
 
-        const isRateLimit = status === 429 || message.toLowerCase().includes("quota");
-      
+      const isRateLimit = status === 429 || message.toLowerCase().includes("quota");
+
       if ((isRateLimit || status === 503) && attempt < retries) {
         const delay = attempt * 3000;
         await sleep(delay);

@@ -38,7 +38,7 @@ export async function runWithRepair<T>(
         if (Array.isArray(currentPrompt)) {
           currentPrompt = [...currentPrompt, { text: repairInstruction }];
         } else {
-          currentPrompt = [currentPrompt, { text: repairInstruction }];
+          currentPrompt = [{ text: currentPrompt }, { text: repairInstruction }];
         }
       }
 

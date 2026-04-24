@@ -12,10 +12,16 @@ import { createRepo, pushFiles } from "./src/lib/integrations/github.js";
 import { syncSprint } from "./src/lib/integrations/clickup.js";
 import githubRouter from "./src/routes/github.js";
 import githubWebhookRouter from "./src/webhooks/githubWebhook.js";
-dotenv.config({ debug: true });
+dotenv.config({ debug: true, override: true });
 
 const app = express();
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DIRECT_URL as string
+    }
+  }
+});
 
 // ==========================================
 // GLOBAL ERROR HANDLERS (DEBUGGING)
@@ -75,11 +81,17 @@ app.post('/api/prd/upload', upload.single('prd'), async (req, res): Promise<any>
         prdVersions: {
           create: {
             versionNumber: 1,
+            pdfData: req.file.buffer,
             parsedText: "Asynchronously processing PRD...",
           },
         },
       },
+      include: {
+        prdVersions: true
+      }
     });
+
+    const prdVersionId = savedProject.prdVersions[0].id;
 
     const job = await prisma.pipelineJob.create({
       data: {
@@ -88,15 +100,8 @@ app.post('/api/prd/upload', upload.single('prd'), async (req, res): Promise<any>
       }
     });
 
-    const documentPart = {
-      inlineData: {
-        data: req.file.buffer.toString("base64"),
-        mimeType: req.file.mimetype,
-      },
-    };
-
     // Trigger background process
-    processPrdJob(job.id, documentPart).catch(err => {
+    processPrdJob(job.id, prdVersionId).catch(err => {
       console.error(`[Job ${job.id}] Background failure:`, err);
     });
 

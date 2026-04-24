@@ -39,7 +39,9 @@ model PrdVersion {
   projectId      String    @db.Uuid
   versionNumber  Int       
   fileUrl        String?   
+  pdfData        Bytes?
   parsedText     String    @db.Text
+  parsedJson     Json?
   createdAt      DateTime  @default(now())
 
   project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

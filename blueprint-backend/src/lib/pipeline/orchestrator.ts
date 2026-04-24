@@ -6,8 +6,15 @@ import { Type, type Schema } from "@google/genai";
 import { SYSTEM_PROMPTS } from "../ai/prompts.js";
 import { buildTraceability } from "./traceabilityGenerator.js";
 import { generateSprints } from "./sprintPlanner.js";
+import { runPythonPdfParser } from "./pythonBridge.js";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DIRECT_URL as string
+    }
+  }
+});
 
 // Stage Output Types
 interface NormalizedText { text: string; sections: string[] }
@@ -20,7 +27,7 @@ interface CodeFile { path: string; name: string; language: string; content: stri
 interface TaskTest { taskId: string; tests: string[] }
 interface PRDHealth { healthScore: { score: number; issues: string[] }; ambiguities: string[] }
 
-export async function processPrdJob(jobId: string, documentPart: any) {
+export async function processPrdJob(jobId: string, prdVersionId: string) {
   console.log(`\n🧵 Starting background processing for Job: ${jobId}`);
   
   await prisma.pipelineJob.update({
@@ -29,22 +36,30 @@ export async function processPrdJob(jobId: string, documentPart: any) {
   });
 
   try {
-    // Stage 0: Ingest & Normalize
-    const ingestResult = await runStage<NormalizedText>(jobId, "Ingest & Normalize", async () => {
-      const schema: Schema = {
-        type: Type.OBJECT,
-        properties: {
-          text: { type: Type.STRING },
-          sections: { type: Type.ARRAY, items: { type: Type.STRING } }
-        },
-        required: ["text", "sections"]
-      };
-      return await routeTask<NormalizedText>(
-        "Ingest",
-        "Extract all text from the provided PRD PDF and format it as structured Markdown. Identify main sections (Goals, Requirements, NFRs, etc.).",
-        documentPart,
-        schema
-      );
+    // Stage 0: Ingest & Normalize (Using Python Parser)
+    const ingestResult = await runStage<any>(jobId, "Ingest & Normalize", async () => {
+        try {
+            const prdVersion = await prisma.prdVersion.findUnique({ where: { id: prdVersionId } });
+            if (!prdVersion || !prdVersion.pdfData) {
+                 return { status: "failed", errors: ["No PDF data found in database"] };
+            }
+
+            const parsedJson = await runPythonPdfParser(prdVersion.pdfData);
+            
+            // Save to DB
+            const textContent = parsedJson.chunks.map((c: any) => c.content).join("\n");
+            await prisma.prdVersion.update({
+                where: { id: prdVersionId },
+                data: { 
+                   parsedJson: parsedJson,
+                   parsedText: textContent 
+                }
+            });
+
+            return { status: "success", data: parsedJson };
+        } catch (e: any) {
+            return { status: "failed", errors: [e.message] };
+        }
     });
     if (ingestResult.status === "failed") {
         await prisma.pipelineJob.update({
@@ -53,7 +68,7 @@ export async function processPrdJob(jobId: string, documentPart: any) {
         });
         return;
     }
-    const normalizedText = ingestResult.data!.text;
+    const normalizedText = ingestResult.data!.chunks.map((c: any) => c.content).join("\n\n");
 
     // Stage 1: Feature Extraction
     const featureResult = await runStage<{ features: Feature[] }>(jobId, "Feature Extraction", async () => {
@@ -116,7 +131,7 @@ export async function processPrdJob(jobId: string, documentPart: any) {
       return await routeTask<{ stories: UserStory[] }>(
         "Stories",
         SYSTEM_PROMPTS.STORY_GENERATOR,
-        JSON.stringify(features),
+        features.map(f => `Feature: ${f.name}\nDescription: ${f.description}`).join("\n\n"),
         schema
       );
     });
@@ -158,7 +173,7 @@ export async function processPrdJob(jobId: string, documentPart: any) {
       return await routeTask<{ tasks: Task[] }>(
         "Tasks",
         SYSTEM_PROMPTS.TASK_GENERATOR,
-        JSON.stringify(stories),
+        stories.map(s => `Story: ${s.story}\nCriteria: ${s.acceptanceCriteria.join(", ")}`).join("\n\n"),
         schema
       );
     });
@@ -213,7 +228,7 @@ export async function processPrdJob(jobId: string, documentPart: any) {
         return await routeTask<Architecture>(
           "Architecture",
           SYSTEM_PROMPTS.ARCHITECTURE_GENERATOR,
-          JSON.stringify({ features, tasks }),
+          `Features:\n${features.map(f=>f.name).join(", ")}\n\nTasks:\n${tasks.map(t=>t.title).join(", ")}`,
           schema
         );
       }),
@@ -228,9 +243,7 @@ export async function processPrdJob(jobId: string, documentPart: any) {
         };
         return await routeTask<{ codeFiles: CodeFile[], devops: DevOps }>(
             "Implementation",
-            `Generate boilerplate code and DevOps configurations. 
-             System Architecture Context: ${JSON.stringify(architecture)}
-             Tasks to Implement: ${JSON.stringify(tasks)}`,
+            `Generate boilerplate code and DevOps configs for these core tasks:\n${tasks.map(t=>t.title).slice(0,5).join("\n")}`,
             normalizedText,
             schema
         );
@@ -262,7 +275,7 @@ export async function processPrdJob(jobId: string, documentPart: any) {
         return await routeTask<{ tests: any[], postmanCollection: any }>(
             "Testing",
             SYSTEM_PROMPTS.TEST_GENERATOR,
-            JSON.stringify(tasks),
+            tasks.map(t=>t.title + ": " + t.description).slice(0,5).join("\n\n"),
             schema
         );
       }),
