@@ -47,96 +47,61 @@ interface TraceNodeData extends Record<string, unknown> {
 }
 
 // ==========================================
-// ==========================================
-// TRACEABILITY LEGEND
-// ==========================================
-const TraceLegend = () => (
-  <div className="absolute bottom-6 left-6 z-20 bg-zinc-950/90 backdrop-blur-xl border border-zinc-800 p-5 rounded-2xl shadow-2xl space-y-4 w-64">
-    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 mb-2">Lineage Legend</h4>
-    <div className="space-y-2.5">
-      <div className="flex items-center gap-3">
-        <div className="w-3 h-3 rounded-sm bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-        <span className="text-xs text-zinc-300 font-medium">Business Goals</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="w-3 h-3 rounded-sm bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]" />
-        <span className="text-xs text-zinc-300 font-medium">User Stories</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="w-3 h-3 rounded-sm bg-ec4899 shadow-[0_0_8px_rgba(236,72,153,0.5)]" style={{ backgroundColor: '#ec4899' }} />
-        <span className="text-xs text-zinc-300 font-medium">Core Engines</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="w-3 h-3 rounded-sm bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-        <span className="text-xs text-zinc-300 font-medium">Golden Path (Hero)</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="w-3 h-3 rounded-sm border border-dashed border-emerald-500 bg-emerald-500/10" />
-        <span className="text-xs text-zinc-300 font-medium">Automation Loop</span>
-      </div>
-    </div>
-  </div>
-);
-
-// ==========================================
 // CUSTOM TRACEABILITY NODE
 // ==========================================
 const TraceNode = ({ data, selected }: any) => {
   const getStyles = () => {
     switch (data.type) {
+      case 'requirement': 
       case 'feature': return { border: "border-blue-500", icon: FileText, color: "text-blue-400", bg: "bg-blue-500/10" };
       case 'story': return { border: "border-purple-500", icon: Search, color: "text-purple-400", bg: "bg-purple-500/10" };
-      case 'service': 
-      case 'engine': return { border: "border-pink-500", icon: Zap, color: "text-pink-400", bg: "bg-pink-500/10" };
+      case 'service': return { border: "border-indigo-500", icon: Server, color: "text-indigo-400", bg: "bg-indigo-500/10" };
       case 'api': return { border: "border-amber-500", icon: Code2, color: "text-amber-400", bg: "bg-amber-500/10" };
-      case 'database': return { border: "border-emerald-500", icon: Database, color: "text-emerald-400", bg: "bg-emerald-500/10" };
-      case 'test': return { border: "border-green-500", icon: CheckCircle2, color: "text-green-400", bg: "bg-green-500/10" };
+      case 'task': return { border: "border-green-500", icon: GitMerge, color: "text-green-400", bg: "bg-green-500/10" };
       default: return { border: "border-zinc-700", icon: Info, color: "text-zinc-400", bg: "bg-zinc-900" };
     }
   };
 
   const styles = getStyles();
   const Icon = styles.icon;
-  const isGolden = data.isGoldenPath;
 
   return (
     <div className={`
-      flex items-center gap-3 p-3 rounded-xl border-2 w-72 transition-all duration-300 bg-zinc-950 backdrop-blur-xl
-      ${selected ? `${styles.border} shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)] scale-105 z-20` : "border-zinc-800 hover:border-zinc-600"}
-      ${data.highlighted ? `${styles.border} opacity-100 ring-4 ring-white/5 z-30` : ""}
-      ${data.dimmed ? "opacity-20 grayscale" : "opacity-100"}
-      ${isGolden ? "border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]" : ""}
+      flex items-center gap-3 p-3 rounded-xl border-2 w-64 transition-all duration-300 bg-zinc-950 backdrop-blur-xl
+      ${selected ? `${styles.border} shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)] scale-105 z-20` : "border-zinc-800 hover:border-zinc-600 opacity-80"}
+      ${data.highlighted ? `${styles.border} opacity-100 ring-4 ring-white/5` : ""}
+      ${data.dimmed ? "opacity-30 grayscale-[0.5]" : ""}
     `}>
-      <Handle type="target" position={Position.Top} className="w-2 h-2 bg-zinc-600 border-none" />
+      <Handle type="target" position={Position.Left} className="w-2 h-2 bg-zinc-600 border-none" />
 
-      <div className={`p-2.5 rounded-lg ${styles.bg} ${isGolden ? "bg-amber-500/20" : ""}`}>
-        <Icon className={`w-5 h-5 ${styles.color} ${isGolden ? "text-amber-400" : ""}`} />
+      <div className={`p-2.5 rounded-lg ${styles.bg}`}>
+        <Icon className={`w-5 h-5 ${styles.color}`} />
       </div>
 
       <div className="flex flex-col overflow-hidden flex-1">
         <div className="flex items-center justify-between">
-          <span className={`text-[10px] font-black uppercase tracking-wider ${styles.color} ${isGolden ? "text-amber-400" : ""}`}>{data.badge}</span>
-          {isGolden && <Zap className="w-3 h-3 text-amber-500 animate-pulse" />}
+          <span className={`text-[10px] font-black uppercase tracking-wider ${styles.color}`}>{data.badge}</span>
+          {data.type === 'task' && (
+             <Badge variant="outline" className={`text-[8px] h-4 px-1 leading-none ${data.status === 'Done' ? 'text-green-400 border-green-500/20 bg-green-500/10' : 'text-zinc-500 border-zinc-700 bg-zinc-900'}`}>
+                {data.status || 'Todo'}
+             </Badge>
+          )}
         </div>
         <span className="text-sm font-semibold text-white truncate leading-tight mt-0.5">{data.label}</span>
       </div>
 
-      <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-zinc-600 border-none" />
+      <Handle type="source" position={Position.Right} className="w-2 h-2 bg-zinc-600 border-none" />
+      
+      {data.highlighted && (data.type === 'requirement' || data.type === 'feature') && (
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white text-zinc-950 px-3 py-1 rounded-full text-[10px] font-bold shadow-xl animate-bounce whitespace-nowrap">
+          IMPACT ANALYSIS ACTIVE
+        </div>
+      )}
     </div>
   );
 };
 
-const LaneNode = ({ data }: any) => (
-  <div className="w-full h-full border-b-2 border-dashed border-zinc-800/30 bg-zinc-900/5 pointer-events-none relative transition-all"
-       style={{ backgroundColor: `${data.color}05` }}>
-    <div className="absolute top-6 left-8 bg-zinc-950/80 backdrop-blur-xl px-5 py-2 rounded-xl border border-zinc-800 shadow-2xl flex items-center gap-3">
-      <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: data.color }} />
-      <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white opacity-60">{data.label}</span>
-    </div>
-  </div>
-);
-
-const nodeTypes = { trace: TraceNode, lane: LaneNode };
+const nodeTypes = { trace: TraceNode };
 
 export default function Traceability() {
   const { toast } = useToast();
@@ -189,51 +154,46 @@ export default function Traceability() {
     fetchData();
   }, [fetchData]);
 
-  // Hover Lineage Highlighting
-  const onNodeMouseEnter = (_: any, node: any) => {
-    if (loading || impactAnalysis) return;
+  // Impact Analysis (Recursive Discovery)
+  const performImpactAnalysis = useCallback((nodeId: string) => {
+    const affectedNodeIds = new Set<string>();
+    const affectedEdgeIds = new Set<string>();
 
-    const connectedNodeIds = new Set<string>();
-    const connectedEdgeIds = new Set<string>();
-
-    // Bidirectional traversal for lineage
-    const traverse = (id: string, direction: 'up' | 'down') => {
-      connectedNodeIds.add(id);
+    const traverse = (id: string) => {
+      affectedNodeIds.add(id);
       edges.forEach(edge => {
-        if (direction === 'down' && edge.source === id) {
-          connectedEdgeIds.add(edge.id);
-          traverse(edge.target, 'down');
-        }
-        if (direction === 'up' && edge.target === id) {
-          connectedEdgeIds.add(edge.id);
-          traverse(edge.source, 'up');
+        if (edge.source === id) {
+          affectedEdgeIds.add(edge.id);
+          traverse(edge.target);
         }
       });
     };
 
-    traverse(node.id, 'up');
-    traverse(node.id, 'down');
+    traverse(nodeId);
 
     setNodes(nds => nds.map(n => ({
       ...n,
       data: {
         ...n.data,
-        highlighted: connectedNodeIds.has(n.id),
-        dimmed: !connectedNodeIds.has(n.id) && n.type !== 'group'
+        highlighted: affectedNodeIds.has(n.id),
+        dimmed: !affectedNodeIds.has(n.id)
       }
     })));
 
     setEdges(eds => eds.map(e => ({
       ...e,
-      style: connectedEdgeIds.has(e.id) ? { stroke: '#ffffff', strokeWidth: 3 } : { stroke: '#3f3f46', opacity: 0.1 },
-      markerEnd: { ...markerEnd, color: connectedEdgeIds.has(e.id) ? '#ffffff' : '#3f3f46' }
+      animated: affectedEdgeIds.has(e.id),
+      style: affectedEdgeIds.has(e.id) ? { stroke: '#ffffff', strokeWidth: 3 } : { stroke: '#3f3f46', opacity: 0.2 },
+      markerEnd: affectedEdgeIds.has(e.id) ? { ...markerEnd, color: '#ffffff' } : { ...markerEnd, color: '#3f3f46' }
     })));
-  };
 
-  const onNodeMouseLeave = () => {
-    if (loading) return;
-    resetAnalysis();
-  };
+    setImpactAnalysis(true);
+    toast({
+      title: "Impact Analysis Loaded",
+      description: `Analysis complete. Downstream dependencies highlighted.`,
+      variant: "default"
+    });
+  }, [edges, setNodes, setEdges, toast]);
 
   const resetAnalysis = useCallback(() => {
     setNodes(nds => nds.map(n => ({
@@ -242,14 +202,19 @@ export default function Traceability() {
     })));
     setEdges(eds => eds.map(e => ({
       ...e,
+      animated: false,
       style: { stroke: '#3f3f46', strokeWidth: 2 },
       markerEnd
     })));
+    setImpactAnalysis(false);
   }, [setNodes, setEdges]);
 
   // Node Selection Handler
   const onNodeClick = (_: any, node: any) => {
     setSelectedNode(node);
+    if (node.data.type === 'requirement' || node.data.type === 'feature') {
+      performImpactAnalysis(node.id);
+    }
   };
 
   const handleExport = () => {
@@ -318,22 +283,17 @@ export default function Traceability() {
                 </div>
              ) : null}
 
-             {/* NARRATIVE OVERLAY */}
-             <div className="absolute top-8 left-8 z-20 pointer-events-none">
-                <motion.div 
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-1"
-                >
-                  <h2 className="text-2xl font-black text-white tracking-tighter uppercase italic">Requirement Traceability & Automated Lineage</h2>
-                  <div className="flex items-center gap-3">
-                    <div className="px-2 py-0.5 rounded bg-primary/20 border border-primary/30 text-[10px] font-bold text-primary uppercase">AlgoOptima v2.0</div>
-                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-widest">Real-Time Impact Graph</div>
-                  </div>
-                </motion.div>
+             <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+                <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 p-3 rounded-lg max-w-xs transition-all">
+                  <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-2">
+                    <Zap className="w-3 h-3 text-amber-500" />
+                    Impact Analysis Enabled
+                  </h4>
+                  <p className="text-[10px] text-zinc-400 leading-normal">
+                    Click any <span className="text-blue-400 font-bold underline">Requirement or Feature node</span> to instantly see affected components.
+                  </p>
+                </div>
              </div>
-
-             <TraceLegend />
 
             <ReactFlow
               nodes={nodes}
@@ -341,8 +301,6 @@ export default function Traceability() {
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeClick={onNodeClick}
-              onNodeMouseEnter={onNodeMouseEnter}
-              onNodeMouseLeave={onNodeMouseLeave}
               nodeTypes={nodeTypes}
               fitView
               colorMode="dark"
