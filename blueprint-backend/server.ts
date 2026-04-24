@@ -9,7 +9,7 @@ import { PrismaClient } from "@prisma/client";
 
 import { processPrdJob } from "./src/lib/pipeline/orchestrator.js";
 import { createRepo, pushFiles } from "./src/lib/integrations/github.js";
-import { syncSprint } from "./src/lib/integrations/clickup.js";
+
 import { buildTraceability } from "./src/lib/pipeline/traceabilityGenerator.js";
 import githubRouter from "./src/routes/github.js";
 import clickupRouter from "./src/routes/clickup.js";
@@ -684,30 +684,7 @@ app.get("/api/clickup/status", async (req, res) => {
 /**
  * Sync sprint to ClickUp
  */
-app.post("/api/sync-clickup", async (req, res) => {
-  try {
-    const { projectId, profileId, sprint, listId } = req.body;
 
-    if (!profileId || !listId) {
-      return res.status(400).json({ error: "profileId and listId are required to sync to ClickUp" });
-    }
-
-    const connection = await prisma.clickUpConnection.findUnique({
-      where: { profileId }
-    });
-
-    if (!connection) {
-      return res.status(403).json({ error: "ClickUp is not connected for this user." });
-    }
-
-    const result = await syncSprint(listId, sprint, connection.accessToken);
-
-    res.json({ success: true, result });
-
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 
 

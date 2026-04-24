@@ -388,12 +388,29 @@ clickupRouter.post("/sync-task", async (req, res) => {
 
 clickupRouter.post("/push-sprint", async (req, res) => {
   try {
-    const { profileId, projectId, workspaceId, spaceId, folderId, sprintName } = req.body || {};
+    let { profileId, projectId, workspaceId, spaceId, folderId, sprintName } = req.body || {};
 
-    if (!profileId || !projectId || !workspaceId || !spaceId || !sprintName) {
+    if (!profileId || !projectId || !sprintName) {
       return res.status(400).json({
-        error: "profileId, projectId, workspaceId, spaceId, and sprintName are required.",
+        error: "profileId, projectId, and sprintName are required.",
       });
+    }
+
+    // Auto-discovery for workspace and space if missing
+    if (!workspaceId || !spaceId) {
+      const token = await getClickUpTokenForProfile(profileId);
+      
+      if (!workspaceId) {
+        const teams = await fetchWorkspaces(token);
+        if (teams.length === 0) throw new Error("No ClickUp workspaces found for this account.");
+        workspaceId = teams[0].id;
+      }
+      
+      if (!spaceId) {
+        const spaces = await fetchSpaces(token, workspaceId);
+        if (spaces.length === 0) throw new Error("No spaces found in your ClickUp workspace.");
+        spaceId = spaces[0].id;
+      }
     }
 
     const result = await pushSprintToClickUp({

@@ -250,23 +250,76 @@ export default function Sprints() {
   };
 
   const syncToClickUp = async () => {
+    const profileId = localStorage.getItem("profileId") || "";
+    if (!profileId) {
+      toast({ variant: "destructive", title: "Error", description: "You must be logged in to sync to ClickUp." });
+      return;
+    }
+
     try {
-      toast({ title: "Syncing...", description: "Pushing tasks to ClickUp sprint board." });
-      const response = await fetch(`${BACKEND_BASE}/api/sync-clickup`, {
+      toast({ title: "Syncing...", description: "Checking ClickUp connection." });
+      
+      // 1. Verify connection
+      const statusRes = await fetch(`${BACKEND_BASE}/api/clickup/status?profileId=${profileId}`);
+      const statusData = await statusRes.json();
+      
+      if (!statusData.isConnected) {
+        toast({
+          variant: "destructive",
+          title: "ClickUp Not Linked",
+          description: "Please connect your ClickUp workspace in Settings first.",
+          action: (
+            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/settings")}>
+              Go to Settings
+            </Button>
+          )
+        });
+        return;
+      }
+
+      // 2. Perform Sync using the modern push-sprint endpoint
+      // Note: In a production flow, we would fetch these IDs from the user's mapping.
+      // If they aren't set, we redirect to settings to establish them.
+      const response = await fetch(`${BACKEND_BASE}/api/clickup/push-sprint`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: projectId || "demo-project-123",
-          sprint: { name: "Sprint 1", tasks: tasks.map(t => t.id) }
+          profileId: profileId,
+          sprintName: "Sprint 1",
+          // Removing hardcoded IDs to let the backend handle defaults or mapping
+          workspaceId: localStorage.getItem("clickup_workspace_id") || "",
+          spaceId: localStorage.getItem("clickup_space_id") || ""
         })
       });
-      if (!response.ok) throw new Error("Sync failed");
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        const msg = errorData.error || "Sync failed";
+        
+        // Handle unauthorized / expired token
+        if (msg.includes("401") || msg.includes("OAUTH")) {
+          toast({
+            variant: "destructive",
+            title: "Re-authentication Required",
+            description: "Your ClickUp session has expired or is unauthorized.",
+            action: (
+              <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/settings")}>
+                Fix Connection
+              </Button>
+            )
+          });
+          return;
+        }
+        throw new Error(msg);
+      }
+      
       toast({ title: "Synced", description: "Tasks successfully pushed to ClickUp." });
-    } catch (err) {
+    } catch (err: any) {
       toast({
         variant: "destructive",
-        title: "Navigation Failed",
-        description: "Could not open ClickUp integration page."
+        title: "Sync Failed",
+        description: err.message || "Could not push tasks to ClickUp."
       });
     }
   };
