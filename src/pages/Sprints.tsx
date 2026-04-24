@@ -147,6 +147,20 @@ export default function Sprints() {
       } catch (err) {
         console.error("Failed to update task status on server", err);
       }
+
+      // Also sync to ClickUp if linked
+      const profileId = localStorage.getItem("profileId") || "";
+      if (profileId) {
+        try {
+          await fetch(`http://localhost:5000/api/clickup/sync-task`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profileId, projectId, localTaskId: draggedTaskId, status: newStatus })
+          });
+        } catch {
+          // Silently ignore — ClickUp may not be linked
+        }
+      }
     }
     
     setDraggedTaskId(null);
@@ -165,22 +179,13 @@ export default function Sprints() {
 
   const syncToClickUp = async () => {
     try {
-      toast({ title: "Syncing...", description: "Pushing tasks to ClickUp sprint board." });
-      const response = await fetch("http://localhost:5000/api/sync-clickup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: "demo-project-123",
-          sprint: { name: "Sprint 1", tasks: tasks.map(t => t.id) }
-        })
-      });
-      if (!response.ok) throw new Error("Sync failed");
-      toast({ title: "Synced", description: "Tasks successfully pushed to ClickUp." });
+      toast({ title: "Redirecting...", description: "Opening ClickUp integration settings." });
+      navigate(`/dashboard/automation?projectId=${projectId || ""}`);
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Sync Failed",
-        description: "Could not sync to ClickUp. Ensure backend is running."
+        title: "Navigation Failed",
+        description: "Could not open ClickUp integration page."
       });
     }
   };
