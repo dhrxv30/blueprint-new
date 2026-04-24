@@ -313,7 +313,7 @@ export async function linkProjectRepository(input: {
       owner: input.owner,
       repo: input.repo,
       fullName,
-      webhookId: hook.webhookId || input.webhookId,
+      webhookId: hook.webhookId || input.webhookId || null,
     },
     create: {
       projectId: input.projectId,
@@ -321,7 +321,7 @@ export async function linkProjectRepository(input: {
       owner: input.owner,
       repo: input.repo,
       fullName,
-      webhookId: hook.webhookId || input.webhookId,
+      webhookId: hook.webhookId || input.webhookId || null,
     },
   });
 
