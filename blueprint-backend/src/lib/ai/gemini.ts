@@ -4,14 +4,13 @@ import type { Schema } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
 
-// Helper function to pause execution
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function generateJSONResponse<T>(
   systemInstruction: string,
   userPromptOrFile: any,
   responseSchema: Schema,
-  retries: number = 5 // Increased retries for hackathon demo stability
+  retries: number = 3
 ): Promise<T> {
 
   if (!ai) {
@@ -19,9 +18,6 @@ export async function generateJSONResponse<T>(
     if (!apiKey) throw new Error("GEMINI_API_KEY missing from .env");
     ai = new GoogleGenAI({ apiKey });
   }
-
-  // CRITICAL: Switching to gemini-3-flash-preview as requested to bypass rate limits
-  const model = "gemini-2.5-flash";
 
   let parts = [];
   if (typeof userPromptOrFile === "string") {
@@ -32,47 +28,45 @@ export async function generateJSONResponse<T>(
     parts = [userPromptOrFile];
   }
 
-  // Retry Loop
+  // Exclusive model as requested
+  const modelName = "gemini-3-flash-preview";
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const response = await ai.models.generateContent({
-        model,
+      console.log(`\n🤖 AI Inference via ${modelName} (Attempt ${attempt}/${retries})`);
+      
+      const result = await ai.models.generateContent({
+        model: modelName,
         contents: [{ role: "user", parts }],
         config: {
           systemInstruction,
           responseMimeType: "application/json",
           responseSchema: responseSchema,
           temperature: 0.1,
-        },
+        }
       });
 
-      if (!response.text) throw new Error("No text returned from Gemini");
-      return JSON.parse(response.text) as T;
+      if (!result.text) throw new Error("No text returned from Gemini engine");
+      return JSON.parse(result.text) as T;
 
     } catch (error: any) {
-      // LOG ERROR DETAILS TO TERMINAL
-      const status = error?.status || error?.response?.status;
-      const message = error?.message || "Internal AI Error";
-      const details = error?.response?.data || error?.details || "No extra details";
+        const status = error?.status || error?.response?.status;
+        const message = error?.message || "Internal AI Engine Error";
 
-      console.error(`\n❌ Gemini API Error (Attempt ${attempt}/${retries}):`, {
-        status,
-        message,
-        details
-      });
+        // Structured logging for debugging
+        console.error(`\n[GEMINI_ENGINE_ERROR] Model: ${modelName} | Attempt: ${attempt}/${retries}`);
+        console.error(`Status: ${status || "N/A"} | Message: ${message}`);
 
-      const isRateLimit = status === 429;
-      const isOverloaded = status === 503;
-
-      if ((isRateLimit || isOverloaded) && attempt < retries) {
-        const delay = attempt * 5000; // Wait 5s, then 10s, then 15s
-        console.warn(`⚠️ Gemini API busy (${status}). Retrying in ${delay / 1000}s...`);
+        const isRateLimit = status === 429 || message.toLowerCase().includes("quota");
+      
+      if ((isRateLimit || status === 503) && attempt < retries) {
+        const delay = attempt * 3000;
         await sleep(delay);
       } else {
-        throw error;
+        throw error; // Immediate failure for non-transient errors
       }
     }
   }
 
-  throw new Error("Pipeline failed after maximum retries.");
+  throw new Error("Gemini Pipeline failed.");
 }

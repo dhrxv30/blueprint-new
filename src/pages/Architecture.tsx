@@ -1,337 +1,347 @@
-// src/pages/Architecture.tsx
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Server,
-  Database,
-  Cloud,
-  Globe,
-  Lock,
-  CreditCard,
-  ArrowRight,
-  Code2,
-  Box,
   Loader2,
-  AlertCircle
+  Maximize2,
+  LayoutDashboard
 } from "lucide-react";
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   Controls,
   useNodesState,
   useEdgesState,
-  Handle,
-  Position,
   ReactFlowProvider,
-  useReactFlow
+  useReactFlow,
+  MarkerType,
+  BaseEdge,
+  getSmoothStepPath,
+  EdgeProps,
+  EdgeLabelRenderer
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { toPng } from 'html-to-image';
+import dagre from 'dagre';
 
-const iconMap: Record<string, any> = {
-  gateway: Globe,
-  service: Server,
-  database: Database,
-  cache: Server,
-  auth: Lock,
-  payments: CreditCard,
-  cloud: Cloud,
-  default: Box
+// Import Custom Components
+import { UnifiedNode } from "@/components/architecture/UnifiedNode";
+import { LaneNode } from "@/components/architecture/LaneNode";
+
+// ==========================================
+// SWIMLANE LAYOUT LOGIC
+// ==========================================
+const LANE_CONFIG: Record<string, { x: number; y: number; w: number; h: number; order: number }> = {
+  'lane-clients': { x: 0, y: 0, w: 400, h: 1000, order: 0 },
+  'lane-edge': { x: 450, y: 0, w: 400, h: 1000, order: 1 },
+  'lane-app': { x: 900, y: 0, w: 700, h: 1000, order: 2 },
+  'lane-data': { x: 1650, y: 0, w: 400, h: 1000, order: 3 },
+  'lane-external': { x: 2100, y: 0, w: 400, h: 1000, order: 4 },
+  'lane-obs': { x: 0, y: 1050, w: 2500, h: 300, order: 5 },
+};
+
+const getLayoutedElements = (nodes: any[], edges: any[]) => {
+  // 1. Initialize Global Graph for coordination
+  const g = new dagre.graphlib.Graph({ compound: true });
+  g.setGraph({ 
+    rankdir: 'LR', 
+    nodesep: 80, 
+    ranksep: 150,
+    marginx: 100,
+    marginy: 100
+  });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  // Separate lanes and actual content nodes
+  const laneNodes = nodes.filter(n => n.type === 'lane');
+  const contentNodes = nodes.filter(n => n.type === 'unified');
+
+  // 2. Add content nodes to global graph for rank calculation
+  contentNodes.forEach((node) => {
+    g.setNode(node.id, { width: 200, height: 120 });
+  });
+
+  // 3. Add ALL edges for global coordination
+  edges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  // 4. Run Global Layout
+  dagre.layout(g);
+
+  // 5. Transform coordinates
+  const processedContentNodes = contentNodes.map(node => {
+    const pos = g.node(node.id);
+    const laneId = node.parentId || 'lane-app';
+    const config = LANE_CONFIG[laneId] || LANE_CONFIG['lane-app'];
+
+    return {
+      ...node,
+      position: { 
+        // We use the static lane X, but center the node within it
+        x: (config.w / 2) - 100, 
+        // Use the GLOBAL Y from dagre to ensure cross-lane alignment
+        // (Offset by 100 for the lane header)
+        y: pos.y + 100
+      },
+    };
+  });
+
+  // 6. Position Lanes statically
+  const processedLanes = laneNodes.map(lane => {
+    const config = LANE_CONFIG[lane.id] || LANE_CONFIG['lane-app'];
+    return {
+      ...lane,
+      position: { x: config.x, y: config.y },
+      style: { width: config.w, height: config.h, pointerEvents: 'none' as const },
+    };
+  });
+
+  return { nodes: [...processedLanes, ...processedContentNodes], edges };
 };
 
 // ==========================================
-// CUSTOM NODE
+// CUSTOM EDGE
 // ==========================================
-const BlueprintNode = ({ data, selected }: any) => {
-  // THE FIX: Safely fallback to an empty object if data is completely missing
-  const safeData = data || {};
-  const nodeType = safeData.type ? safeData.type.toLowerCase() : 'default';
-  const Icon = iconMap[nodeType] || iconMap.default;
+const AntigravityEdge = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style = {},
+  markerEnd,
+  label,
+  data,
+}: EdgeProps) => {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetPosition,
+    targetX,
+    targetY,
+    borderRadius: 20,
+  });
 
   return (
-    <div className="flex flex-col items-center gap-2 group transition-all w-32">
-      <Handle type="target" position={Position.Top} className="w-2 h-2 bg-primary border-none" />
-      <div className={`
-        w-16 h-16 rounded-xl border-2 flex items-center justify-center transition-all duration-200 bg-zinc-950
-        ${selected
-          ? "border-primary text-primary shadow-[0_0_20px_-5px_rgba(249,115,22,0.5)] scale-110 z-10"
-          : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white"}
-      `}>
-        <Icon className="w-8 h-8" />
-      </div>
-      <span className={`text-[10px] font-medium px-2 py-1 rounded-md text-center truncate w-full ${selected ? "bg-primary/10 text-primary" : "bg-zinc-900 text-zinc-400"}`}>
-        {safeData.label || "Unknown Node"}
-      </span>
-      <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-primary border-none" />
-    </div>
+    <>
+      <BaseEdge 
+        path={edgePath} 
+        markerEnd={markerEnd} 
+        style={{ ...style, strokeWidth: 1.5, stroke: style.stroke || '#52525b' }} 
+      />
+      {label && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              fontSize: 8,
+              fontWeight: 900,
+              pointerEvents: 'none',
+            }}
+            className="px-2 py-1 bg-black border border-white/10 rounded text-zinc-500 uppercase tracking-tighter"
+          >
+            {label}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+      {data?.animated && (
+        <circle r="2" fill="#ffffff" filter="blur(1px)">
+          <animateMotion dur="2s" repeatCount="indefinite" path={edgePath} />
+        </circle>
+      )}
+    </>
   );
 };
 
-const nodeTypes = { blueprint: BlueprintNode };
+const nodeTypes = { 
+  unified: UnifiedNode,
+  lane: LaneNode
+};
+const edgeTypes = { antigravity: AntigravityEdge };
 
-// ==========================================
-// INTERNAL CONTENT COMPONENT
-// ==========================================
 function ArchitectureContent() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("projectId");
   const { toast } = useToast();
-  const { getNodes } = useReactFlow();
+  const { fitView } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       let architectureData = null;
-
       if (projectId) {
         const response = await fetch(`http://localhost:5000/api/projects/${projectId}/architecture`);
-        if (response.ok) {
-          architectureData = await response.json();
-        }
+        if (response.ok) architectureData = await response.json();
       }
 
       if (!architectureData) {
-        const rawData = localStorage.getItem("blueprint_project_data");
-        if (rawData) {
-          const project = JSON.parse(rawData);
-          if (typeof project.architecture === 'string') {
-            architectureData = JSON.parse(project.architecture);
-          } else {
-            architectureData = project.architecture;
-          }
-        }
+        const raw = localStorage.getItem("blueprint_project_data");
+        if (raw) architectureData = JSON.parse(raw).architecture;
       }
 
       if (!architectureData || !architectureData.nodes) {
-        toast({
-          variant: "destructive",
-          title: "Architecture Missing",
-          description: "Run PRD analysis first."
-        });
+        toast({ variant: "destructive", title: "Error", description: "Analysis not found." });
         return;
       }
 
-      if (architectureData && architectureData.nodes?.length > 0) {
-        // THE FIX: Bulletproof data mapping. We force everything into the 'data' object.
-        const formattedNodes = architectureData.nodes
-          .filter((n: any) => n && n.id) 
-          .map((n: any, index: number) => {
-            // Find the data payload whether the AI nested it or kept it flat
-            const innerData = n.data || n; 
+      const rawNodes = (architectureData.nodes || []).map((n: any) => {
+        const label = (n.label || "").toLowerCase();
+        const type = (n.type || "").toLowerCase();
+        let pid = (n.parentId || "").toLowerCase();
+        
+        // Intelligent Lane Routing Heuristics
+        let assignedLane = 'lane-app'; // Default
 
-            return {
-              id: n.id,
-              type: 'blueprint', // This tells ReactFlow to use our custom component
-              position: (n.position && typeof n.position.x === 'number')
-                ? n.position
-                : { x: (index % 3) * 250, y: Math.floor(index / 3) * 180 },
-              // We explicitly build the required data object here
-              data: {
-                label: innerData.label || innerData.name || "Service Node",
-                type: innerData.type || "service", 
-                description: innerData.description || "",
-                tech: innerData.tech || ""
-              }
-            };
-          });
+        // 1. Client Layer detection
+        if (pid.includes('client') || label.includes('ui') || label.includes('extension') || label.includes('mobile') || label.includes('app') || type === 'client') {
+          assignedLane = 'lane-clients';
+        } 
+        // 2. Edge / Network Layer detection
+        else if (pid.includes('edge') || label.includes('gateway') || label.includes('dns') || label.includes('load balancer') || label.includes('lb') || type === 'gateway') {
+          assignedLane = 'lane-edge';
+        }
+        // 3. Data Layer detection
+        else if (pid.includes('data') || pid.includes('db') || type === 'database' || type === 'cache' || type === 'storage' || label.includes('database') || label.includes('redis') || label.includes('sql')) {
+          assignedLane = 'lane-data';
+        }
+        // 4. External Layer detection
+        else if (pid.includes('external') || type === 'external' || label.includes('api') && !label.includes('gateway')) {
+          assignedLane = 'lane-external';
+        }
+        // 5. Observability detection
+        else if (pid.includes('obs') || label.includes('metrics') || label.includes('logging') || label.includes('tracing')) {
+          assignedLane = 'lane-obs';
+        }
 
-        // Safely format edges so they don't break if IDs are missing
-        const formattedEdges = (architectureData.edges || []).map((e: any, i: number) => ({
-            ...e,
-            id: e.id || `edge-${i}-${e.source}-${e.target}`,
-            animated: true,
-            style: { stroke: '#52525b', strokeWidth: 2 }
-        }));
+        return {
+          id: n.id,
+          parentId: assignedLane,
+          type: 'unified',
+          data: { 
+            label: n.label, 
+            type: n.type || 'service', 
+            description: n.description 
+          },
+          position: { x: 0, y: 0 },
+          extent: 'parent' as const
+        };
+      });
 
-        setNodes(formattedNodes);
-        setEdges(formattedEdges);
-        if (formattedNodes.length > 0) setSelectedNodeData(formattedNodes[0].data);
-      }
+      // Ensure lanes exist
+      const lanes = Object.keys(LANE_CONFIG).map(lid => ({
+        id: lid,
+        type: 'lane',
+        data: { label: lid.replace('lane-', '').toUpperCase() + ' LAYER' },
+        position: { x: 0, y: 0 },
+        selectable: false,
+        draggable: false,
+      }));
+
+      // Filter out AI lanes if they exist, use our strict ones
+      const finalNodes = [...lanes, ...rawNodes];
+
+      const rawEdges = (architectureData.edges || []).map((e: any, i: number) => ({
+        id: e.id || `edge-${i}`,
+        source: e.source || e.from,
+        target: e.target || e.to,
+        label: e.label || "",
+        type: 'antigravity',
+        data: { animated: e.animated },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#ffffff' },
+      })).filter((e: any) => e.source && e.target);
+
+      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(finalNodes, rawEdges);
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
+      setTimeout(() => fitView({ padding: 0.2, duration: 1000 }), 200);
     } catch (e) {
-      console.error("Data Load Error", e);
+      console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [setNodes, setEdges]);
+  }, [projectId, fitView, toast, setNodes, setEdges]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
-    setSelectedNodeData(node.data);
+  const onNodeMouseEnter = useCallback((_: any, node: any) => {
+    if (node.type === 'unified') setHoveredNodeId(node.id);
   }, []);
 
-  const handleExport = async () => {
-    const currentNodes = getNodes();
-    if (currentNodes.length === 0) return;
+  const onNodeMouseLeave = useCallback(() => setHoveredNodeId(null), []);
 
-    const viewportWrap = document.querySelector('.react-flow__viewport') as HTMLElement;
-    if (!viewportWrap) return;
-
-    toast({
-      title: "Exporting Diagram",
-      description: "Preparing your architecture graph as a high-res PNG...",
+  const processedEdges = useMemo(() => {
+    if (!hoveredNodeId) return edges;
+    return edges.map(e => {
+      const isConnected = e.source === hoveredNodeId || e.target === hoveredNodeId;
+      return {
+        ...e,
+        style: { ...e.style, stroke: isConnected ? '#ffffff' : '#18181b', strokeWidth: isConnected ? 2 : 1, opacity: isConnected ? 1 : 0.1 }
+      };
     });
+  }, [edges, hoveredNodeId]);
 
-    try {
-      const dataUrl = await toPng(viewportWrap, {
-        backgroundColor: '#09090b',
-        style: {
-          width: '1200px',
-          height: '800px',
-          transform: 'none',
-        },
-      });
-
-      const link = document.createElement('a');
-      link.download = 'architecture-diagram.png';
-      link.href = dataUrl;
-      link.click();
-
-      toast({
-        title: "Success",
-        description: "Architecture diagram exported successfully.",
-      });
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: "Export Failed",
-        description: "There was an error generating the PNG. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex flex-col items-center justify-center h-[60vh]">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-          <p className="text-zinc-400">Loading system architecture...</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (nodes.length === 0) {
-    return (
-      <DashboardLayout>
-        <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-          <AlertCircle className="w-12 h-12 text-zinc-600 mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Architecture Not Found</h2>
-          <p className="text-zinc-400 mb-6">We couldn't find a generated architecture for this project.</p>
-          <Button onClick={() => navigate("/dashboard/upload")} className="bg-primary">
-            Upload PRD
-          </Button>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  if (loading) return (
+    <DashboardLayout>
+      <div className="flex flex-col items-center justify-center h-[60vh]">
+        <div className="w-16 h-16 border-4 border-white/5 border-t-white rounded-full animate-spin mb-4" />
+        <p className="text-zinc-600 font-black uppercase tracking-[0.4em]">Rendering Topology</p>
+      </div>
+    </DashboardLayout>
+  );
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+      <div className="flex justify-between items-center mb-8 px-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-            System Architecture
+          <h1 className="text-3xl font-black text-white tracking-tighter flex items-center gap-3">
+            BLUEPRINT <span className="text-zinc-700">OS / ARCH</span>
           </h1>
-          <p className="text-zinc-400 mt-1">Interactive map of generated services and databases.</p>
         </div>
-        <div className="flex gap-3">
-          <Button onClick={handleExport} variant="outline" className="bg-zinc-950 border-zinc-700 text-white hover:bg-zinc-800 gap-2">
-             Export PNG
+        <div className="flex gap-2">
+          <Button onClick={() => fitView({ padding: 0.1, duration: 500 })} variant="outline" className="h-10 bg-white/5 border-white/10 text-white hover:bg-white/10 rounded-xl">
+             CENTER VIEW
           </Button>
-          <Button onClick={() => navigate(`/dashboard/code${projectId ? `?projectId=${projectId}` : ''}`)} className="bg-primary hover:brightness-110 text-white gap-2">
-            <Code2 className="w-4 h-4" /> Generate Code
+          <Button onClick={() => navigate(`/dashboard/code?projectId=${projectId}`)} className="h-10 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl px-6">
+            DEPLOY CODE
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-14rem)] min-h-[600px]">
-        <Card className="lg:col-span-2 bg-zinc-900 border-zinc-800 flex flex-col relative overflow-hidden">
-          <CardHeader className="border-b border-zinc-800 pb-4 bg-zinc-950/50 z-10">
-            <CardTitle className="text-white text-xs flex items-center gap-2">
-              <Cloud className="w-4 h-4 text-primary" /> Service Topology
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 p-0 relative bg-zinc-950">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onNodeClick={onNodeClick}
-              nodeTypes={nodeTypes}
-              fitView
-              colorMode="dark"
-            >
-              <Background color="#27272a" gap={20} />
-              <Controls />
-            </ReactFlow>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-1 bg-zinc-900 border-zinc-800 flex flex-col">
-          <CardHeader className="border-b border-zinc-800 bg-zinc-950/50">
-            <CardTitle className="text-white text-sm">Component Details</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 p-6 space-y-6 overflow-y-auto">
-            {selectedNodeData ? (
-              <>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-                    {(() => {
-                      const Icon = iconMap[selectedNodeData.type?.toLowerCase()] || iconMap.default;
-                      return <Icon className="w-6 h-6" />;
-                    })()}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">{selectedNodeData.label}</h2>
-                    <p className="text-xs uppercase text-zinc-500 font-semibold">{selectedNodeData.type}</p>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-white mb-2">Description</h3>
-                  <p className="text-sm text-zinc-400 leading-relaxed">{selectedNodeData.description || "No description provided."}</p>
-                </div>
-                {selectedNodeData.tech && (
-                  <div>
-                    <h3 className="text-sm font-medium text-white mb-2">Tech Stack</h3>
-                    <div className="px-3 py-1 rounded-full bg-zinc-950 border border-zinc-800 text-xs text-primary font-mono inline-block">
-                      {selectedNodeData.tech}
-                    </div>
-                  </div>
-                )}
-                <Button onClick={() => navigate(`/dashboard/traceability${projectId ? `?projectId=${projectId}` : ''}`)} className="w-full bg-zinc-100 text-zinc-900 hover:bg-zinc-200 mt-auto">
-                  View Traceability <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </>
-            ) : (
-              <div className="text-zinc-500 text-center mt-20">Select a node to view its details</div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="h-[calc(100vh-14rem)] bg-[#030303] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl relative">
+        <ReactFlow
+          nodes={nodes}
+          edges={processedEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeMouseEnter={onNodeMouseEnter}
+          onNodeMouseLeave={onNodeMouseLeave}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          colorMode="dark"
+          fitView
+        >
+          <Background variant={BackgroundVariant.Dots} gap={40} size={1} color="#111" />
+          <Controls className="!bg-zinc-900 !border-white/5 !fill-white rounded-xl translate-x-4 -translate-y-4" />
+        </ReactFlow>
       </div>
     </DashboardLayout>
   );
 }
 
-// ==========================================
-// EXPORTED COMPONENT (WITH PROVIDER)
-// ==========================================
 export default function Architecture() {
-  return (
-    <ReactFlowProvider>
-      <ArchitectureContent />
-    </ReactFlowProvider>
-  );
+  return <ReactFlowProvider><ArchitectureContent /></ReactFlowProvider>;
 }

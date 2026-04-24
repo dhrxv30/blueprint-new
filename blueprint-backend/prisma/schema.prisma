@@ -62,6 +62,7 @@ model PipelineAnalysis {
   clarifications Json       @default("[]")
   healthScore    Json       @default("{}")
   devops         Json       @default("{}")
+  postmanCollection Json    @default("{}")
   
   changeImpact   Json?
 

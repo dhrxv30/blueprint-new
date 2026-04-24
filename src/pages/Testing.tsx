@@ -4,7 +4,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FlaskConical, ShieldAlert, AlertTriangle, Code2, 
-  Send, CheckCircle2, XCircle, AlertCircle, Copy, Check, Download 
+  Send, CheckCircle2, XCircle, AlertCircle, Copy, Check, Download, Loader2 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -14,6 +14,8 @@ import {
   unitStubs as demoUnit,
   postmanCollection as demoPostman,
 } from '@/data/demo/tests';
+import { useSearchParams } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 
 // =====================================
 // TYPES
@@ -146,34 +148,129 @@ export default function Testing({ isDemo = false }: { isDemo?: boolean }) {
   const [negativeTests, setNegativeTests] = useState<TestCase[]>([]);
   const [unitStubs, setUnitStubs] = useState<TestCase[]>([]);
   const [postmanData, setPostmanData] = useState<any>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Helper to normalize legacy test formats
+  const normalizeTests = (rawTests: any[]): TestCase[] => {
+    if (!Array.isArray(rawTests)) return [];
+
+    return rawTests.flatMap((t: any, index: number) => {
+      // New format: already has category, method, etc.
+      if (t.category && t.method) {
+        return [t as TestCase];
+      }
+
+      // Old format: { taskId: string, tests: string[] }
+      if (Array.isArray(t.tests)) {
+        return t.tests.map((desc: string, subIndex: number) => ({
+          id: `legacy-${index}-${subIndex}`,
+          method: desc.toLowerCase().includes('post') ? 'POST' : 'GET',
+          endpoint: '/api/v1/...',
+          description: desc,
+          expected: 'Status 200 OK',
+          status: 'pass' as TestStatus,
+          category: desc.toLowerCase().includes('edge') ? 'edge' : 
+                    desc.toLowerCase().includes('negative') ? 'negative' :
+                    desc.toLowerCase().includes('unit') ? 'unit' : 'functional'
+        }));
+      }
+
+      // Catch-all for other objects
+      return [{
+        id: `gen-${index}`,
+        method: 'GET',
+        endpoint: '/api/v1/...',
+        description: typeof t === 'string' ? t : (t.description || JSON.stringify(t)),
+        expected: 'Successful execution',
+        status: 'pass' as TestStatus,
+        category: 'functional'
+      }];
+    });
+  };
+
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("projectId");
+  const { toast } = useToast();
+  const backendBase = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
   useEffect(() => {
-    if (isDemo) {
-      // Use static demo data for landing page
-      setFunctionalTests(demoFunctional as TestCase[]);
-      setEdgeCaseTests(demoEdge as TestCase[]);
-      setNegativeTests(demoNegative as TestCase[]);
-      setUnitStubs(demoUnit as TestCase[]);
-      setPostmanData(demoPostman);
-    } else {
-      // Load real AI generated data for actual Dashboard
-      const raw = localStorage.getItem("blueprint_project_data");
-      if (raw) {
-        try {
-          const data = JSON.parse(raw);
-          const tests = data.tests || [];
-          
-          setFunctionalTests(tests.filter((t: any) => t.category === "functional"));
-          setEdgeCaseTests(tests.filter((t: any) => t.category === "edge"));
-          setNegativeTests(tests.filter((t: any) => t.category === "negative"));
-          setUnitStubs(tests.filter((t: any) => t.category === "unit"));
-          setPostmanData(data.postmanCollection || {});
-        } catch (e) {
-          console.error("Error parsing test data", e);
-        }
+    const fetchData = async () => {
+      setIsLoading(true);
+      if (isDemo) {
+        const tests = normalizeTests(demoFunctional.concat(demoEdge).concat(demoNegative).concat(demoUnit) as any);
+        updateTestStates(tests);
+        setPostmanData(demoPostman);
+        setIsLoading(false);
+        return;
       }
+
+      if (!projectId) {
+        const raw = localStorage.getItem("blueprint_project_data");
+        if (raw) {
+          try {
+            const data = JSON.parse(raw);
+            const tests = normalizeTests(data.tests || []);
+            updateTestStates(tests);
+            setPostmanData(data.postmanCollection || {});
+          } catch (e) {
+            console.error("Error parsing test data", e);
+          }
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        console.log(`[Testing] Fetching tests for project: ${projectId}`);
+        const res = await fetch(`${backendBase}/api/projects/${projectId}/tests`);
+        if (!res.ok) {
+          if (res.status === 404) throw new Error("No tests found for this project ID.");
+          throw new Error(`Server error: ${res.statusText}`);
+        }
+        
+        const rawTests = await res.json();
+        console.log(`[Testing] Received ${rawTests?.length || 0} raw tests`);
+        const tests = normalizeTests(rawTests);
+        updateTestStates(tests);
+        
+        const analysisRes = await fetch(`${backendBase}/api/projects/${projectId}/analysis`);
+        if (analysisRes.ok) {
+          const analysisData = await analysisRes.json();
+          setPostmanData(analysisData.postmanCollection || {});
+        }
+      } catch (err: any) {
+        console.error("[Testing] Load failed:", err);
+        toast({
+          variant: "destructive",
+          title: "Data Loading Failed",
+          description: err.message || "Could not fetch test results from server."
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isDemo, projectId]);
+
+  const updateTestStates = (tests: TestCase[]) => {
+    const functional = tests.filter((t: any) => t.category === "functional");
+    const edge = tests.filter((t: any) => t.category === "edge");
+    const negative = tests.filter((t: any) => t.category === "negative");
+    const unit = tests.filter((t: any) => t.category === "unit");
+
+    setFunctionalTests(functional);
+    setEdgeCaseTests(edge);
+    setNegativeTests(negative);
+    setUnitStubs(unit);
+
+    // Auto-switch to first category with data if functional is empty
+    if (functional.length === 0) {
+      if (edge.length > 0) setActive('edge');
+      else if (negative.length > 0) setActive('negative');
+      else if (unit.length > 0) setActive('unit');
     }
-  }, [isDemo]);
+  };
 
   const categories: { key: Category; label: string; icon: React.ElementType; count: number }[] = [
     { key: 'functional', label: 'Functional Tests', icon: FlaskConical, count: functionalTests.length },
@@ -285,13 +382,24 @@ export default function Testing({ isDemo = false }: { isDemo?: boolean }) {
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                {(categoryData[active] || []).length > 0 ? (
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-zinc-500 font-mono text-sm">Retrieving test suites...</p>
+                  </div>
+                ) : (categoryData[active] || []).length > 0 ? (
                   (categoryData[active] || []).map((test, i) => (
                     <TestItem key={test.id || i} test={test} isDemo={isDemo} />
                   ))
+                ) : !projectId && !localStorage.getItem("blueprint_project_data") ? (
+                  <div className="text-zinc-500 text-center mt-20 text-sm border border-dashed border-zinc-800 rounded-lg p-10 bg-zinc-900/20">
+                    <p className="mb-2">No active project selected.</p>
+                    <p className="text-xs text-zinc-600">Please select a project from the Dashboard to see real-time testing data.</p>
+                  </div>
                 ) : (
                   <div className="text-zinc-500 text-center mt-20 text-sm border border-dashed border-zinc-800 rounded-lg p-10 bg-zinc-900/20">
-                    No {active} tests generated by the AI for this project yet.
+                    <p className="mb-2 text-zinc-300">No {active} tests found for this project.</p>
+                    <p className="text-xs">If you just created this project, wait a few moments for the AI to complete its analysis.</p>
                   </div>
                 )}
               </div>

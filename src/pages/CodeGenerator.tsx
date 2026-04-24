@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { codeToHtml } from "shiki";
 import JSZip from "jszip";
+import { useSearchParams } from "react-router-dom";
 
 // ======================================
 // CUSTOM ICONS & TYPES
@@ -45,6 +46,9 @@ interface CodeFile {
 
 export default function CodeGenerator() {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("projectId");
+  const backendBase = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
   const [fileTree, setFileTree] = useState<CodeFile[]>([]);
   const [activeFile, setActiveFile] = useState<CodeFile | null>(null);
@@ -56,42 +60,66 @@ export default function CodeGenerator() {
 
   /*
   ======================================
-  LOAD PIPELINE CODE STRUCTURE
+  LOAD CODE STRUCTURE FROM BACKEND
   ======================================
   */
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("blueprint_project_data");
-      if (!raw) {
-        setIsLoading(false);
-        return;
-      }
-
-      const data = JSON.parse(raw);
-      const codeStructure = data.codeStructure || [];
-
-      setFileTree(codeStructure);
-
-      const findFirstFile = (nodes: CodeFile[]): CodeFile | null => {
-        for (const n of nodes) {
-          if (n.type === "file") return n;
-          if (n.children) {
-            const f = findFirstFile(n.children);
-            if (f) return f;
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        if (!projectId) {
+          // Fallback to local storage for backward compatibility during demo
+          const raw = localStorage.getItem("blueprint_project_data");
+          if (raw) {
+            const data = JSON.parse(raw);
+            setFileTree(data.codeStructure || []);
+            initializeFirstFile(data.codeStructure || []);
           }
+          setIsLoading(false);
+          return;
         }
-        return null;
-      };
 
-      const firstFile = findFirstFile(codeStructure);
-      if (firstFile) setActiveFile(firstFile);
+        console.log(`[CodeGenerator] Fetching code for project: ${projectId}`);
+        const res = await fetch(`${backendBase}/api/projects/${projectId}/code-structure`);
+        if (!res.ok) {
+          if (res.status === 404) throw new Error("No code structure found for this project.");
+          throw new Error(`Server error: ${res.statusText}`);
+        }
+        
+        const codeStructure = await res.json();
+        console.log(`[CodeGenerator] Received structure with ${codeStructure?.length || 0} top-level nodes`);
+        setFileTree(codeStructure || []);
+        initializeFirstFile(codeStructure || []);
+      } catch (err: any) {
+        console.error("[CodeGenerator] Load failed:", err);
+        toast({
+          variant: "destructive",
+          title: "Connection Error",
+          description: err.message || "Could not fetch code structure from server."
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-      setIsLoading(false);
-    } catch (err) {
-      console.error("Failed to load code structure:", err);
-      setIsLoading(false);
-    }
-  }, []);
+    fetchData();
+  }, [projectId]);
+
+  const initializeFirstFile = (nodes: CodeFile[]) => {
+    const findFirstFile = (list: CodeFile[]): CodeFile | null => {
+      for (const n of list) {
+        if (n.type === "file") return n;
+        if (n.children) {
+          const f = findFirstFile(n.children);
+          if (f) return f;
+        }
+      }
+      return null;
+    };
+
+    const firstFile = findFirstFile(nodes);
+    if (firstFile) setActiveFile(firstFile);
+  };
 
   /*
   ======================================
@@ -295,9 +323,15 @@ export default function CodeGenerator() {
               </div>
             ) : fileTree.length > 0 ? (
               fileTree.map(n => <FileTreeNode key={n.path} node={n} />)
+            ) : !projectId && !localStorage.getItem("blueprint_project_data") ? (
+              <div className="p-8 text-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-lg m-4">
+                No active project selected. 
+                <p className="mt-2 text-xs opacity-60 text-zinc-600">Please select a project from the Dashboard.</p>
+              </div>
             ) : (
-              <div className="p-4 text-center text-sm text-zinc-500">
+              <div className="p-8 text-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-lg m-4">
                 No code structure generated yet.
+                <p className="mt-2 text-xs opacity-60 text-zinc-600 italic">Analysis might be in progress...</p>
               </div>
             )}
           </CardContent>

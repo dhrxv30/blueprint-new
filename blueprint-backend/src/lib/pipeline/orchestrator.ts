@@ -173,13 +173,40 @@ export async function processPrdJob(jobId: string, documentPart: any) {
 
     // Parallel Stages: Architecture Synthesis, Implementation Details, Test Planning, Health Analysis
     console.log("-> Launching parallel generation for Architecture, Implementation, Testing, and Health Analysis...");
-    const [archResult, codeResult, testResult, healthResult] = await Promise.all([
+    const results = await Promise.all([
       runStage<Architecture>(jobId, "Architecture Synthesis", async () => {
         const schema: Schema = {
           type: Type.OBJECT,
           properties: {
-            nodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, label: { type: Type.STRING }, type: { type: Type.STRING }, description: { type: Type.STRING }, tech: { type: Type.STRING } }, required: ["id", "label", "type", "description"] } },
-            edges: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { from: { type: Type.STRING }, to: { type: Type.STRING }, description: { type: Type.STRING } }, required: ["from", "to"] } }
+            nodes: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: { 
+                  id: { type: Type.STRING }, 
+                  label: { type: Type.STRING }, 
+                  type: { type: Type.STRING }, 
+                  description: { type: Type.STRING },
+                  parentId: { type: Type.STRING, description: "ID of the parent group node, if any" },
+                  style: { type: Type.OBJECT, properties: { backgroundColor: { type: Type.STRING } } }
+                }, 
+                required: ["id", "label", "type", "description"] 
+              } 
+            },
+            edges: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: { 
+                  id: { type: Type.STRING }, 
+                  source: { type: Type.STRING }, 
+                  target: { type: Type.STRING }, 
+                  label: { type: Type.STRING },
+                  animated: { type: Type.BOOLEAN }
+                }, 
+                required: ["id", "source", "target", "label", "animated"] 
+              } 
+            }
           },
           required: ["nodes", "edges"]
         };
@@ -201,20 +228,38 @@ export async function processPrdJob(jobId: string, documentPart: any) {
         };
         return await routeTask<{ codeFiles: CodeFile[], devops: DevOps }>(
             "Implementation",
-            `Generate boilerplate code and DevOps configurations based on the following tasks:\n${JSON.stringify(tasks)}`,
+            `Generate boilerplate code and DevOps configurations. 
+             System Architecture Context: ${JSON.stringify(architecture)}
+             Tasks to Implement: ${JSON.stringify(tasks)}`,
             normalizedText,
             schema
         );
       }),
-      runStage<{ tests: TaskTest[] }>(jobId, "Test Planning", async () => {
+      runStage<{ tests: any[], postmanCollection: any }>(jobId, "Test Planning", async () => {
         const schema: Schema = {
             type: Type.OBJECT,
             properties: {
-                tests: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { taskId: { type: Type.STRING }, tests: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["taskId", "tests"] } }
+                tests: { 
+                    type: Type.ARRAY, 
+                    items: { 
+                        type: Type.OBJECT, 
+                        properties: { 
+                            id: { type: Type.STRING },
+                            method: { type: Type.STRING },
+                            endpoint: { type: Type.STRING },
+                            description: { type: Type.STRING },
+                            expected: { type: Type.STRING },
+                            status: { type: Type.STRING },
+                            category: { type: Type.STRING }
+                        }, 
+                        required: ["id", "method", "endpoint", "description", "expected", "status", "category"] 
+                    } 
+                },
+                postmanCollection: { type: Type.OBJECT }
             },
-            required: ["tests"]
+            required: ["tests", "postmanCollection"]
         };
-        return await routeTask<{ tests: TaskTest[] }>(
+        return await routeTask<{ tests: any[], postmanCollection: any }>(
             "Testing",
             SYSTEM_PROMPTS.TEST_GENERATOR,
             JSON.stringify(tasks),
@@ -246,6 +291,8 @@ export async function processPrdJob(jobId: string, documentPart: any) {
       })
     ]);
 
+    const [archResult, codeResult, testResult, healthResult] = results;
+
     if (archResult.status === "failed" || codeResult.status === "failed" || testResult.status === "failed" || healthResult.status === "failed") {
         await prisma.pipelineJob.update({
             where: { id: jobId },
@@ -254,16 +301,24 @@ export async function processPrdJob(jobId: string, documentPart: any) {
         return;
     }
 
-    const architecture = archResult.data!;
-    const codeFiles = codeResult.data!.codeFiles;
-    const devops = codeResult.data!.devops;
-    const tests = testResult.data!.tests;
-    const healthData = healthResult.data!;
+    const architecture: Architecture = archResult.data!;
+    const codeFiles: CodeFile[] = codeResult.data!.codeFiles;
+    const devops: DevOps = codeResult.data!.devops;
+    const tests: any[] = testResult.data!.tests;
+    const postmanCollection = testResult.data!.postmanCollection;
+    const healthData: PRDHealth = healthResult.data!;
 
     // Stage 7: Deterministic Post-Processing
     console.log("-> Running Deterministic Post-Processing...");
     const sprints = generateSprints(tasks || []);
-    const traceability = buildTraceability(features || [], stories || [], tasks || []);
+    const traceability = buildTraceability(
+        features || [], 
+        stories || [], 
+        tasks || [], 
+        architecture || null, 
+        codeFiles || [],
+        tests || []
+    );
     const codeStructure = buildFileTree(codeFiles || []);
 
     // Persist final result to PipelineAnalysis (Compatibility layer)
@@ -274,21 +329,25 @@ export async function processPrdJob(jobId: string, documentPart: any) {
             orderBy: { versionNumber: 'desc' }
         });
         if (prdVersion) {
+            // Use a type cast to bypass stale Prisma Client types if generation is blocked by EPERM
+            const analysisData: any = {
+                prdVersionId: prdVersion.id,
+                features: features as any,
+                stories: stories as any,
+                tasks: tasks as any,
+                sprints: sprints as any,
+                architecture: JSON.stringify(architecture),
+                codeStructure: codeStructure as any,
+                tests: tests as any,
+                traceability: traceability as any,
+                devops: devops as any,
+                healthScore: healthData.healthScore as any,
+                ambiguities: healthData.ambiguities as any,
+                postmanCollection: postmanCollection as any
+            };
+
             await prisma.pipelineAnalysis.create({
-                data: {
-                    prdVersionId: prdVersion.id,
-                    features: features as any,
-                    stories: stories as any,
-                    tasks: tasks as any,
-                    sprints: sprints as any,
-                    architecture: JSON.stringify(architecture),
-                    codeStructure: codeStructure as any,
-                    tests: tests as any,
-                    traceability: traceability as any,
-                    devops: devops as any,
-                    healthScore: healthData.healthScore as any,
-                    ambiguities: healthData.ambiguities as any
-                }
+                data: analysisData
             });
         }
     }
