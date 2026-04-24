@@ -21,14 +21,22 @@ const githubRouter = Router();
 githubRouter.get("/oauth/start", async (req, res) => {
   try {
     const profileId = String(req.query.profileId || "");
+    const projectId = String(req.query.projectId || "");
+    
+    console.log("[GitHub OAuth] /oauth/start hit", { profileId, projectId });
+    
     if (!profileId) {
       return res.status(400).json({ error: "profileId is required." });
     }
 
-    logIntegration("oauth_start", { profileId });
-    const url = buildGitHubOAuthStartUrl(profileId);
+    const state = JSON.stringify({ profileId, projectId });
+
+    logIntegration("oauth_start", { profileId, projectId });
+    const url = buildGitHubOAuthStartUrl(state);
+    console.log("[GitHub OAuth] Redirecting to:", url);
     return res.json({ url });
   } catch (error) {
+    console.error("[GitHub OAuth] /oauth/start error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     return res.status(500).json({ error: message });
   }
@@ -39,24 +47,55 @@ githubRouter.get("/oauth/callback", async (req, res) => {
     const code = String(req.query.code || "");
     const state = String(req.query.state || "");
 
+    console.log("[GitHub OAuth] CALLBACK HIT", { code: code ? code.slice(0, 8) + "..." : "(empty)", state });
+
     if (!code || !state) {
+      console.error("[GitHub OAuth] Missing code or state in callback");
       return res.status(400).json({ error: "Missing code or state in callback." });
     }
 
-    const result = await completeGitHubOAuth(code, state);
+    // Parse state safely — it may be JSON or a plain profileId
+    let profileId: string;
+    let projectId: string | undefined;
+    try {
+      const parsed = JSON.parse(state);
+      profileId = parsed.profileId;
+      projectId = parsed.projectId;
+    } catch {
+      console.warn("[GitHub OAuth] Could not parse state as JSON, using as raw profileId");
+      profileId = state;
+    }
+
+    console.log("[GitHub OAuth] Parsed state", { profileId, projectId });
+
+    if (!profileId) {
+      console.error("[GitHub OAuth] profileId is empty after parsing state");
+      return res.status(400).json({ error: "profileId missing from OAuth state." });
+    }
+
+    const result = await completeGitHubOAuth(code, profileId);
+
+    console.log("[GitHub OAuth] OAuth completed successfully", { profileId: result.profileId, username: result.username });
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
     const redirect = new URL("/dashboard/automation", frontendUrl);
     redirect.searchParams.set("github", "connected");
     redirect.searchParams.set("profileId", result.profileId);
+    if (projectId) {
+      redirect.searchParams.set("projectId", projectId);
+    }
 
     logIntegration("oauth_callback_success", {
       profileId: result.profileId,
+      projectId,
       username: result.username,
     });
 
+    console.log("[GitHub OAuth] Redirecting to frontend:", redirect.toString());
     return res.redirect(redirect.toString());
   } catch (error) {
+    console.error("[GitHub OAuth] CALLBACK ERROR:", error);
+
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
     const redirect = new URL("/dashboard/automation", frontendUrl);
     redirect.searchParams.set("github", "error");
