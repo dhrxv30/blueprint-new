@@ -274,7 +274,7 @@ export default function Sprints() {
           </Button>
           <Button
             className="bg-primary hover:brightness-110 text-primary-foreground gap-2 shadow-[0_0_15px_-3px_rgba(249,115,22,0.4)]"
-            onClick={() => navigate('/dashboard/architecture')}
+            onClick={() => navigate(projectId ? `/dashboard/architecture?projectId=${projectId}` : '/dashboard/architecture')}
           >
             View Architecture <ArrowRight className="w-4 h-4" />
           </Button>

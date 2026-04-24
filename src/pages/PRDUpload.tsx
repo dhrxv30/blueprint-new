@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,15 +16,17 @@ import { supabase } from "@/lib/supabase";
 import { BACKEND_BASE } from "@/lib/config";
 
 export default function PRDUpload() {
-
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const projectId = searchParams.get("projectId");
 
   const projectName = location.state?.projectName || "Untitled Project";
 
@@ -151,7 +153,7 @@ export default function PRDUpload() {
       formData.append("prd", file);
       formData.append("profileId", user.id);
       formData.append("projectName", projectName);
-      // ---> ADDED LINE HERE <---
+      if (projectId) formData.append("projectId", projectId);
       formData.append("email", user.email || "");
 
       const response = await fetch(

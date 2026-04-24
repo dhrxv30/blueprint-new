@@ -138,7 +138,7 @@ export default function Overview() {
             <p className="text-zinc-400 mt-3 text-lg leading-relaxed max-w-3xl">{data.description}</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button onClick={() => navigate("/dashboard/analysis")} className="bg-primary hover:brightness-110 text-white gap-2 shadow-lg glow-orange h-11 px-6">
+            <Button onClick={() => navigate(projectId ? `/dashboard/analysis?projectId=${projectId}` : "/dashboard/analysis")} className="bg-primary hover:brightness-110 text-white gap-2 shadow-lg glow-orange h-11 px-6">
               View Analysis <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
@@ -187,7 +187,7 @@ export default function Overview() {
               <ListChecks className="w-5 h-5 text-primary" />
               Core Features Extracted
             </h3>
-            <Button variant="link" onClick={() => navigate("/dashboard/analysis")} className="text-zinc-500 hover:text-white p-0 h-auto">
+            <Button variant="link" onClick={() => navigate(projectId ? `/dashboard/analysis?projectId=${projectId}` : "/dashboard/analysis")} className="text-zinc-500 hover:text-white p-0 h-auto">
               View Feature Details
             </Button>
           </div>

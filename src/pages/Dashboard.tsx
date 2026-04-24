@@ -107,7 +107,7 @@ export default function Dashboard() {
 
   const handlePRDAction = (projectId: string, action: string) => {
     toast({ title: `${action}`, description: `Navigating to ${action.toLowerCase()} flow...` });
-    if (action === "Update PRD") navigate(`/dashboard/upload`);
+    if (action === "Update PRD") navigate(`/dashboard/upload?projectId=${projectId}`);
     if (action === "View PRD") navigate(`/dashboard/overview?projectId=${projectId}`);
   };
 

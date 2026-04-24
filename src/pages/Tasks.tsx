@@ -201,7 +201,7 @@ export default function Tasks() {
           >
             <Filter className="w-4 h-4" /> {isFilterOpen ? 'Close Filters' : 'Filter'}
           </Button>
-          <Button onClick={() => navigate('/dashboard/sprints')} className="bg-primary hover:brightness-110 text-white gap-2 glow-orange">
+          <Button onClick={() => navigate(projectId ? `/dashboard/sprints?projectId=${projectId}` : '/dashboard/sprints')} className="bg-primary hover:brightness-110 text-white gap-2 glow-orange">
             Generate Sprint Plan <ArrowRight className="w-4 h-4" />
           </Button>
         </div>

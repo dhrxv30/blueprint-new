@@ -9,117 +9,106 @@ datasource db {
 }
 
 model Profile {
-  id           String    @id @db.Uuid
-  email        String    @unique
-  name         String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  
-  projects     Project[]
-  githubConnection   GitHubConnection?
-  clickupConnection  ClickUpConnection?
+  id                String             @id @db.Uuid
+  email             String             @unique
+  name              String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  clickupConnection ClickUpConnection?
+  githubConnection  GitHubConnection?
+  projects          Project[]
 }
 
 model Project {
-  id          String       @id @default(uuid()) @db.Uuid
-  profileId   String       @db.Uuid
-  name        String
-  description String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-
-  profile     Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  prdVersions PrdVersion[]
-  pipelineJobs PipelineJob[]
-  githubRepoMapping GitHubRepoMapping?
+  id                String             @id @default(uuid()) @db.Uuid
+  profileId         String             @db.Uuid
+  name              String
+  description       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   clickupMapping    ClickUpMapping?
+  githubRepoMapping GitHubRepoMapping?
+  pipelineJobs      PipelineJob[]
+  prdVersions       PrdVersion[]
   ambiguities       Ambiguity[]
   contextNotes      ContextNote[]
+  profile           Profile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
 }
 
 model PrdVersion {
-  id             String    @id @default(uuid()) @db.Uuid
-  projectId      String    @db.Uuid
-  versionNumber  Int       
-  fileUrl        String?   
-  pdfData        Bytes?
-  parsedText     String    @db.Text
-  parsedJson     Json?
-  createdAt      DateTime  @default(now())
-
-  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  analysis       PipelineAnalysis? 
+  id            String            @id @default(uuid()) @db.Uuid
+  projectId     String            @db.Uuid
+  versionNumber Int
+  fileUrl       String?
+  parsedText    String
+  createdAt     DateTime          @default(now())
+  parsedJson    Json?
+  pdfData       Bytes?
+  analysis      PipelineAnalysis?
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model PipelineAnalysis {
-  id             String     @id @default(uuid()) @db.Uuid
-  prdVersionId   String     @unique @db.Uuid
-  
-  features       Json       @default("[]")
-  stories        Json       @default("[]")
-  tasks          Json       @default("[]")
-  sprints        Json       @default("[]")
-  architecture   String?    @db.Text
-  codeStructure  Json       @default("[]")
-  tests          Json       @default("[]")
-  traceability   Json       @default("{}")
-  ambiguities    Json       @default("[]")
-  clarifications Json       @default("[]")
-  healthScore    Json       @default("{}")
-  devops         Json       @default("{}")
-  postmanCollection Json    @default("{}")
-  
-  changeImpact   Json?
-
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-
-  prdVersion     PrdVersion @relation(fields: [prdVersionId], references: [id], onDelete: Cascade)
+  id                String     @id @default(uuid()) @db.Uuid
+  prdVersionId      String     @unique @db.Uuid
+  features          Json       @default("[]")
+  stories           Json       @default("[]")
+  tasks             Json       @default("[]")
+  sprints           Json       @default("[]")
+  architecture      String?
+  codeStructure     Json       @default("[]")
+  tests             Json       @default("[]")
+  traceability      Json       @default("{}")
+  ambiguities       Json       @default("[]")
+  clarifications    Json       @default("[]")
+  healthScore       Json       @default("{}")
+  devops            Json       @default("{}")
+  changeImpact      Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  postmanCollection Json       @default("{}")
+  prdVersion        PrdVersion @relation(fields: [prdVersionId], references: [id], onDelete: Cascade)
 }
 
 model PipelineJob {
-  id          String   @id @default(uuid()) @db.Uuid
-  projectId   String   @db.Uuid
-  status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, PARTIAL, FAILED
-  error       String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  stages      PipelineStageRun[]
+  id        String             @id @default(uuid()) @db.Uuid
+  projectId String             @db.Uuid
+  status    String             @default("PENDING")
+  error     String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stages    PipelineStageRun[]
 }
 
 model PipelineStageRun {
-  id          String   @id @default(uuid()) @db.Uuid
-  jobId       String   @db.Uuid
-  stageName   String   // e.g., "Ingest", "Features", "Architecture"
-  status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, FAILED
-  error       String?  @db.Text
+  id          String             @id @default(uuid()) @db.Uuid
+  jobId       String             @db.Uuid
+  stageName   String
+  status      String             @default("PENDING")
+  error       String?
   startedAt   DateTime?
   completedAt DateTime?
-
-  job         PipelineJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   artifacts   PipelineArtifact[]
+  job         PipelineJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
 }
 
 model PipelineArtifact {
-  id          String   @id @default(uuid()) @db.Uuid
-  stageRunId  String   @db.Uuid
-  data        Json     @default("{}")
-
-  stageRun    PipelineStageRun @relation(fields: [stageRunId], references: [id], onDelete: Cascade)
+  id         String           @id @default(uuid()) @db.Uuid
+  stageRunId String           @db.Uuid
+  data       Json             @default("{}")
+  stageRun   PipelineStageRun @relation(fields: [stageRunId], references: [id], onDelete: Cascade)
 }
 
 model GitHubConnection {
-  id               String              @id @default(uuid()) @db.Uuid
-  profileId        String              @unique @db.Uuid
-  accessToken      String
-  username         String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  
-  profile          Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  repoMappings     GitHubRepoMapping[]
+  id           String              @id @default(uuid()) @db.Uuid
+  profileId    String              @unique @db.Uuid
+  accessToken  String
+  username     String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  profile      Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  repoMappings GitHubRepoMapping[]
 }
 
 model GitHubRepoMapping {
@@ -132,75 +121,69 @@ model GitHubRepoMapping {
   webhookId          Int?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
-
-  project            Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   githubConnection   GitHubConnection @relation(fields: [githubConnectionId], references: [id], onDelete: Cascade)
+  project            Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
-// ── ClickUp Integration Models ──────────────────────────────
-
 model ClickUpConnection {
-  id            String   @id @default(uuid()) @db.Uuid
-  profileId     String   @unique @db.Uuid
-  accessToken   String                     // encrypted via cryptoService
+  id            String           @id @default(uuid()) @db.Uuid
+  profileId     String           @unique @db.Uuid
+  accessToken   String
   workspaceName String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  profile       Profile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
   mappings      ClickUpMapping[]
 }
 
 model ClickUpMapping {
-  id                   String   @id @default(uuid()) @db.Uuid
-  projectId            String   @unique @db.Uuid
-  clickupConnectionId  String   @db.Uuid
-  workspaceId          String
-  spaceId              String
-  folderId             String?
-  listId               String
-  listName             String?
-  webhookId            String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  project              Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  clickupConnection    ClickUpConnection @relation(fields: [clickupConnectionId], references: [id], onDelete: Cascade)
-  taskMappings         ClickUpTaskMapping[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  projectId           String               @unique @db.Uuid
+  clickupConnectionId String               @db.Uuid
+  workspaceId         String
+  spaceId             String
+  folderId            String?
+  listId              String
+  listName            String?
+  webhookId           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  clickupConnection   ClickUpConnection    @relation(fields: [clickupConnectionId], references: [id], onDelete: Cascade)
+  project             Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskMappings        ClickUpTaskMapping[]
 }
 
 model ClickUpTaskMapping {
-  id               String   @id @default(uuid()) @db.Uuid
-  clickupMappingId String   @db.Uuid
+  id               String         @id @default(uuid()) @db.Uuid
+  clickupMappingId String         @db.Uuid
   localTaskId      String
   clickupTaskId    String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
   clickupMapping   ClickUpMapping @relation(fields: [clickupMappingId], references: [id], onDelete: Cascade)
 
   @@unique([clickupMappingId, localTaskId])
   @@unique([clickupMappingId, clickupTaskId])
 }
 
-// ── Ambiguity Resolution Models ──────────────────────────────
-
 model Ambiguity {
-  id          String   @id @default(uuid()) @db.Uuid
-  projectId   String   @db.Uuid
-  question    String   @db.Text
-  answer      String?  @db.Text
-  status      String   @default("PENDING")  // PENDING | RESOLVED
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @db.Uuid
+  question  String   @db.Text
+  answer    String?  @db.Text
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model ContextNote {
-  id          String   @id @default(uuid()) @db.Uuid
-  projectId   String   @db.Uuid
-  content     String   @db.Text
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @db.Uuid
+  content   String   @db.Text
+  createdAt DateTime @default(now())
 
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
+

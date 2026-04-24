@@ -423,7 +423,7 @@ function ArchitectureContent() {
           <Button onClick={() => fitView({ padding: 0.1, duration: 500 })} variant="outline" className="h-10 bg-white/5 border-white/10 text-white hover:bg-white/10 rounded-xl">
              CENTER VIEW
           </Button>
-          <Button onClick={() => navigate(`/dashboard/code?projectId=${projectId}`)} className="h-10 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl px-6">
+          <Button onClick={() => navigate(projectId ? `/dashboard/code?projectId=${projectId}` : "/dashboard/code")} className="h-10 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl px-6">
             DEPLOY CODE
           </Button>
         </div>
@@ -504,7 +504,7 @@ function ArchitectureContent() {
 
                 <div className="pt-6">
                   <Button 
-                    onClick={() => navigate(`/dashboard/traceability?projectId=${projectId}&focus=${selectedNode.id}`)}
+                    onClick={() => navigate(projectId ? `/dashboard/traceability?projectId=${projectId}&focus=${selectedNode.id}` : `/dashboard/traceability?focus=${selectedNode.id}`)}
                     className="w-full bg-white text-black hover:bg-zinc-200 font-bold rounded-xl h-12"
                   >
                     Inspect Dependencies

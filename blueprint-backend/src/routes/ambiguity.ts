@@ -23,7 +23,7 @@ router.get("/ambiguities/next", async (req, res) => {
     const { projectId } = req.query;
     if (!projectId) return res.status(400).json({ error: "projectId is required" });
 
-    let ambiguity = await prisma.ambiguity.findFirst({
+    let ambiguity = await (prisma as any).ambiguity.findFirst({
       where: {
         projectId: projectId as string,
         status: "PENDING"
@@ -33,7 +33,7 @@ router.get("/ambiguities/next", async (req, res) => {
 
     if (!ambiguity) {
       // Check if we have ANY ambiguities at all (including RESOLVED)
-      const totalCount = await prisma.ambiguity.count({
+      const totalCount = await (prisma as any).ambiguity.count({
         where: { projectId: projectId as string }
       });
 
@@ -47,30 +47,29 @@ router.get("/ambiguities/next", async (req, res) => {
         if (analysis && analysis.ambiguities && Array.isArray(analysis.ambiguities) && analysis.ambiguities.length > 0) {
           try {
             console.log(`[Fallback] Seeding ${analysis.ambiguities.length} ambiguities for project ${projectId}`);
-            const ambiguityObjects = analysis.ambiguities.map((a: any, i: number) => ({
-              id: `amb-${i + 1}`,
-              description: typeof a === 'string' ? a : a.description || a,
-              severity: typeof a === 'string' ? 'medium' : (a.severity || 'medium')
-            }));
+            
+            // Clear any existing PENDING ones to avoid duplicates during fallback
+            await (prisma as any).ambiguity.deleteMany({
+              where: { projectId: projectId as string, status: "PENDING" }
+            });
 
-            if (ambiguityObjects.length > 0) {
-              await prisma.ambiguity.createMany({
-                data: ambiguityObjects.map(a => ({
-                  projectId: projectId as string,
-                  question: a.description,
-                  status: "PENDING"
-                }))
-              });
+            await (prisma as any).ambiguity.createMany({
+              data: analysis.ambiguities.map((a: any) => ({
+                projectId: projectId as string,
+                question: typeof a === 'string' ? a : a.description || a,
+                status: "PENDING",
+                updatedAt: new Date()
+              }))
+            });
 
-              // Fetch the newly seeded first pending ambiguity
-              ambiguity = await prisma.ambiguity.findFirst({
-                where: {
-                  projectId: projectId as string,
-                  status: "PENDING"
-                },
-                orderBy: { createdAt: "asc" }
-              });
-            }
+            // Fetch the newly seeded first pending ambiguity
+            ambiguity = await (prisma as any).ambiguity.findFirst({
+              where: {
+                projectId: projectId as string,
+                status: "PENDING"
+              },
+              orderBy: { createdAt: "asc" }
+            });
           } catch (seedErr) {
             console.warn("Dynamic fallback seeding failed:", seedErr);
           }
@@ -101,13 +100,13 @@ router.post("/ambiguities/answer", async (req, res) => {
       return res.status(400).json({ error: "ambiguityId and answer are required" });
     }
 
-    const updated = await prisma.ambiguity.update({
+    const updated = await (prisma as any).ambiguity.update({
       where: { id: ambiguityId },
       data: { answer, status: "RESOLVED" }
     });
 
     // Fetch the next pending ambiguity for convenience
-    const next = await prisma.ambiguity.findFirst({
+    const next = await (prisma as any).ambiguity.findFirst({
       where: {
         projectId: updated.projectId,
         status: "PENDING"
@@ -136,10 +135,10 @@ router.get("/ambiguities/status", async (req, res) => {
     const { projectId } = req.query;
     if (!projectId) return res.status(400).json({ error: "projectId is required" });
 
-    const total = await prisma.ambiguity.count({
+    const total = await (prisma as any).ambiguity.count({
       where: { projectId: projectId as string }
     });
-    const resolved = await prisma.ambiguity.count({
+    const resolved = await (prisma as any).ambiguity.count({
       where: { projectId: projectId as string, status: "RESOLVED" }
     });
 
@@ -167,7 +166,7 @@ router.post("/context/save", async (req, res) => {
       return res.status(400).json({ error: "projectId and content are required" });
     }
 
-    const note = await prisma.contextNote.create({
+    const note = await (prisma as any).contextNote.create({
       data: { projectId, content }
     });
 
@@ -202,21 +201,21 @@ router.post("/prd/finalize", async (req, res) => {
     const originalPrd = latestVersion.parsedText || "";
 
     // 2. Fetch all resolved Q&A
-    const resolvedAmbiguities = await prisma.ambiguity.findMany({
+    const resolvedAmbiguities = await (prisma as any).ambiguity.findMany({
       where: { projectId, status: "RESOLVED" }
     });
-    const qnaList = resolvedAmbiguities.map((a, i) => ({
+    const qnaList = resolvedAmbiguities.map((a: any, i: number) => ({
       id: i + 1,
       question: a.question,
       answer: a.answer || ""
     }));
 
     // 3. Fetch context notes
-    const contextNotes = await prisma.contextNote.findMany({
+    const contextNotes = await (prisma as any).contextNote.findMany({
       where: { projectId },
       orderBy: { createdAt: "desc" }
     });
-    const contextText = contextNotes.map(n => n.content).join("\n");
+    const contextText = contextNotes.map((n: any) => n.content).join("\n");
 
     // 4. Fetch existing analysis
     const analysis = await prisma.pipelineAnalysis.findFirst({
