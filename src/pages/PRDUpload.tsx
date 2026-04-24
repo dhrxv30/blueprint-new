@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { BACKEND_BASE } from "@/lib/config";
 
 export default function PRDUpload() {
 
@@ -154,7 +155,7 @@ export default function PRDUpload() {
       formData.append("email", user.email || "");
 
       const response = await fetch(
-        "http://localhost:5000/api/prd/upload",
+        `${BACKEND_BASE}/api/prd/upload`,
         {
           method: "POST",
           body: formData

@@ -161,9 +161,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-primary transition-colors" />
               <input 
                 type="text" 
-                placeholder="Search projects or tasks (⌘K)..." 
+                placeholder="Global search (coming soon)" 
                 className="w-full bg-overlay border border-border-subtle rounded-lg py-2 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-all placeholder:text-text-muted"
-                onClick={() => toast({ title: "Search", description: "Global search modal will open here." })}
+                readOnly
+                disabled
               />
             </div>
           </div>
@@ -176,7 +177,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               className="relative text-text-secondary hover:text-foreground hover:bg-overlay"
               onClick={() => {
                 setHasNotifications(false);
-                toast({ title: "Notifications", description: "You're all caught up! No new alerts." });
               }}
             >
               <Bell className="w-5 h-5" />

@@ -1,11 +1,9 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { BookOpen, MessageCircle, Mail, ExternalLink, Zap, FileText, Code2, TestTube, Search, LifeBuoy, ArrowRight } from "lucide-react";
+import { BookOpen, MessageCircle, Mail, ExternalLink, LifeBuoy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
 
 
 const faqs = [
@@ -41,6 +39,7 @@ const supportChannels = [
     description: "Join 2,000+ developers building with Blueprint.dev",
     icon: MessageCircle,
     action: "Join Discord",
+    href: "https://discord.com",
     color: "text-indigo-400",
     bgColor: "bg-indigo-500/10",
   },
@@ -49,6 +48,7 @@ const supportChannels = [
     description: "Get help from our engineering team within 24 hours",
     icon: Mail,
     action: "Send Email",
+    href: "mailto:support@blueprint.dev",
     color: "text-primary",
     bgColor: "bg-primary/10",
   },
@@ -57,6 +57,7 @@ const supportChannels = [
     description: "Comprehensive guides, API references, and tutorials",
     icon: BookOpen,
     action: "Browse Docs",
+    href: "/docs",
     color: "text-emerald-400",
     bgColor: "bg-emerald-500/10",
   },
@@ -65,8 +66,18 @@ const supportChannels = [
 export default function HelpSupport() {
   const { toast } = useToast();
 
-  const handleAction = (channel: string) => {
-    toast({ title: channel, description: `Opening ${channel.toLowerCase()}...` });
+  const handleAction = (_channel: string, href: string) => {
+    if (href.startsWith("mailto:")) {
+      window.location.href = href;
+      return;
+    }
+
+    if (href.startsWith("http")) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    window.location.href = href;
   };
 
   return (
@@ -129,7 +140,7 @@ export default function HelpSupport() {
                     variant="outline"
                     size="sm"
                     className="border-border-emphasis text-foreground hover:bg-overlay w-full"
-                    onClick={() => handleAction(channel.title)}
+                    onClick={() => handleAction(channel.title, channel.href)}
                   >
                     {channel.action}
                     <ExternalLink className="w-3 h-3 ml-1.5" />
@@ -154,7 +165,7 @@ export default function HelpSupport() {
               variant="ghost"
               size="sm"
               className="text-text-secondary hover:text-foreground"
-              onClick={() => toast({ title: "Status Page", description: "Opening system status page..." })}
+              onClick={() => window.open("https://www.githubstatus.com/", "_blank", "noopener,noreferrer")}
             >
               View Status Page
               <ExternalLink className="w-3 h-3 ml-1.5" />

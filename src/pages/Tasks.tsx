@@ -17,6 +17,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { BACKEND_BASE } from "@/lib/config";
 
 interface TaskItem {
   id: string;
@@ -61,11 +62,19 @@ export default function Tasks() {
         let aiTasks = [];
 
         if (projectId) {
-          const response = await fetch(`http://localhost:5000/api/projects/${projectId}/analysis`);
-          if (response.ok) {
-            const analysis = await response.json();
+          const [storiesRes, tasksRes] = await Promise.all([
+            fetch(`${BACKEND_BASE}/api/projects/${projectId}/analysis`),
+            fetch(`${BACKEND_BASE}/api/projects/${projectId}/tasks`)
+          ]);
+
+          if (storiesRes.ok) {
+            const analysis = await storiesRes.json();
             aiStories = Array.isArray(analysis.stories) ? analysis.stories : [];
-            aiTasks = Array.isArray(analysis.tasks) ? analysis.tasks : [];
+          }
+
+          if (tasksRes.ok) {
+            const tasksData = await tasksRes.json();
+            aiTasks = Array.isArray(tasksData) ? tasksData : [];
           }
         }
 

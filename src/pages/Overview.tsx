@@ -6,7 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { calculateCompleteness, calculateComplexity, calculateTimelineWeeks, normalizeHealthScore } from "@/lib/projectMetrics";
 import { ArrowRight, Zap, Target, BarChart3, ListChecks, Clock } from "lucide-react";
+import { BACKEND_BASE } from "@/lib/config";
 
 interface OverviewData {
   name: string;
@@ -47,13 +49,13 @@ export default function Overview() {
         let parsed: any = null;
 
         if (projectId) {
-          const response = await fetch(`http://localhost:5000/api/projects/${projectId}/analysis`);
+          const response = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/analysis`);
           if (response.ok) {
             parsed = await response.json();
           }
         }
 
-        if (!parsed) {
+        if (!projectId && !parsed) {
           const rawData = localStorage.getItem("blueprint_project_data");
           if (rawData) {
             parsed = JSON.parse(rawData);
@@ -68,16 +70,13 @@ export default function Overview() {
           const aiSprints = Array.isArray(parsed.sprints) ? parsed.sprints : [];
           const aiAmbiguities = Array.isArray(parsed.ambiguities) ? parsed.ambiguities : [];
 
-          // Dynamic metrics based on AI output
-          const totalTasks = aiTasks.length;
-          const calculatedComplexity = totalTasks > 30 ? "High" : totalTasks > 10 ? "Medium" : "Low";
-          const estimatedWeeks = Math.max(1, Math.ceil(totalTasks / 8)); // Assuming 8 tasks/week
-
-          // Calculate health score dynamically if missing or 0
-          let finalHealthScore = typeof parsed.healthScore === 'number' ? parsed.healthScore : (parsed.healthScore?.score || 0);
-          if (!finalHealthScore || finalHealthScore === 0) {
-             finalHealthScore = Math.max(10, 95 - (aiAmbiguities.length * 5));
-          }
+          const completeness = calculateCompleteness(parsed);
+          const calculatedComplexity = calculateComplexity(aiTasks, aiAmbiguities);
+          const estimatedWeeks = calculateTimelineWeeks(aiTasks, {
+            ambiguities: aiAmbiguities,
+            plannedSprints: aiSprints.length
+          });
+          const finalHealthScore = normalizeHealthScore(parsed.healthScore, aiAmbiguities, completeness);
 
           // Safely format features (handling both string and object responses from Gemini)
           const formattedFeatures = aiFeatures.map((f: any, i: number) => {
@@ -103,7 +102,7 @@ export default function Overview() {
             name: parsed.projectName || "Untitled Project",
             description: "AI-generated architecture roadmap based on your uploaded PRD requirements. The pipeline has successfully extracted features, stories, and engineering tasks.",
             healthScore: finalHealthScore,
-            completeness: 100, // If data is available, pipeline mapping is complete
+            completeness,
             complexity: calculatedComplexity,
             timeline: `${estimatedWeeks} Weeks`,
             features: formattedFeatures,

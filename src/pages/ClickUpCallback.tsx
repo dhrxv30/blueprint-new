@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { BACKEND_BASE } from "@/lib/config";
 
 export default function ClickUpCallback() {
   const [searchParams] = useSearchParams();
@@ -33,7 +34,7 @@ export default function ClickUpCallback() {
 
         setStatus("Securing connection...");
 
-        const response = await fetch("http://localhost:5000/api/clickup/callback", {
+        const response = await fetch(`${BACKEND_BASE}/api/clickup/callback`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 

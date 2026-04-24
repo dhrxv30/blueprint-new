@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FileSearch, Network, ListTodo, Code2, CheckCircle2, Loader2, ArrowRight, AlertCircle, ShieldCheck, Database, TestTube2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { BACKEND_BASE } from "@/lib/config";
 
 const stepsConfig = [
   { name: "Ingest & Normalize", icon: FileSearch, stage: "Ingest & Normalize" },
@@ -41,7 +42,7 @@ export default function Processing() {
 
     const pollStatus = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/prd/jobs/${jobId}/status`);
+        const response = await fetch(`${BACKEND_BASE}/api/prd/jobs/${jobId}/status`);
         if (!response.ok) throw new Error("Failed to fetch job status");
         
         const data = await response.json();

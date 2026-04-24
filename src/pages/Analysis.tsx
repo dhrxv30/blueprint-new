@@ -3,12 +3,13 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, ListTodo, Zap, Clock, Network, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { FileText, ListTodo, Zap, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { calculateCompleteness, calculateComplexity, calculateTimelineWeeks, normalizeHealthScore } from "@/lib/projectMetrics";
+import { BACKEND_BASE } from "@/lib/config";
 
 interface ParsedData {
   projectName: string;
@@ -19,6 +20,7 @@ interface ParsedData {
   ambiguities?: any[];
   clarifications?: any[];
   architecture?: any;
+  sprints?: any[];
 }
 
 export default function Analysis() {
@@ -37,10 +39,10 @@ export default function Analysis() {
         if (rawData) {
             try {
               const parsed = JSON.parse(rawData);
-              const hsScore = typeof parsed.healthScore === 'number' ? parsed.healthScore : (parsed.healthScore?.score || 0);
               const extractedAmbigs = Array.isArray(parsed.ambiguities) ? parsed.ambiguities : [];
-              const finalHs = hsScore === 0 ? Math.max(10, 95 - (extractedAmbigs.length * 5)) : hsScore;
-              
+              const completeness = calculateCompleteness(parsed);
+              const finalHs = normalizeHealthScore(parsed.healthScore, extractedAmbigs, completeness);
+
               setData({ ...parsed, healthScore: { score: finalHs, issues: parsed.healthScore?.issues || extractedAmbigs } });
             } catch (e) {
               console.error("Invalid localStorage data", e);
@@ -54,16 +56,15 @@ export default function Analysis() {
 
     const fetchAnalysis = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/projects/${projectId}/analysis`);
+        const response = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/analysis`);
         if (!response.ok) throw new Error("Failed to fetch analysis");
         const analysis = await response.json();
         
         const extractedAmbiguities = Array.isArray(analysis.ambiguities) ? analysis.ambiguities : [];
-          
-        let finalHealthScore = typeof analysis.healthScore === 'number' ? analysis.healthScore : (analysis.healthScore?.score || 0);
-        if (!finalHealthScore || finalHealthScore === 0) {
-           finalHealthScore = Math.max(10, 95 - (extractedAmbiguities.length * 5));
-        }
+        const extractedSprints = Array.isArray(analysis.sprints) ? analysis.sprints : [];
+        const completeness = calculateCompleteness(analysis);
+
+        const finalHealthScore = normalizeHealthScore(analysis.healthScore, extractedAmbiguities, completeness);
 
         setData({
           projectName: analysis.projectName || "Architecture Analysis",
@@ -73,7 +74,8 @@ export default function Analysis() {
           healthScore: { score: finalHealthScore, issues: analysis.healthScore?.issues || extractedAmbiguities },
           ambiguities: extractedAmbiguities,
           clarifications: Array.isArray(analysis.clarifications) ? analysis.clarifications : [],
-          architecture: typeof analysis.architecture === 'string' ? JSON.parse(analysis.architecture) : (analysis.architecture || { nodes: [], edges: [] })
+          architecture: typeof analysis.architecture === 'string' ? JSON.parse(analysis.architecture) : (analysis.architecture || { nodes: [], edges: [] }),
+          sprints: extractedSprints
         });
       } catch (err: any) {
         console.error(err);
@@ -111,8 +113,33 @@ export default function Analysis() {
   }
 
   const totalTasks = data.tasks?.length || 0;
-  const estimatedWeeks = Math.max(1, Math.ceil(totalTasks / 8)); 
-  const overallComplexity = totalTasks > 30 ? "High" : totalTasks > 10 ? "Medium" : "Low";
+  const estimatedWeeks = calculateTimelineWeeks(data.tasks || [], {
+    ambiguities: data.ambiguities || [],
+    plannedSprints: data.sprints?.length || 0
+  });
+  const overallComplexity = calculateComplexity(data.tasks || [], data.ambiguities || []);
+  const handleExportReport = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      projectId,
+      summary: {
+        projectName: data.projectName,
+        healthScore: data.healthScore?.score || 0,
+        complexity: overallComplexity,
+        estimatedWeeks
+      },
+      analysis: data
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(data.projectName || "analysis").replace(/\\s+/g, "-").toLowerCase()}-report.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Report Exported", description: "Downloaded analysis report as JSON." });
+  };
 
   return (
     <DashboardLayout>
@@ -125,7 +152,7 @@ export default function Analysis() {
           <Button
             variant="outline"
             className="bg-orange-600 border-orange-700 text-white hover:bg-orange-700"
-            onClick={() => toast({ title: "Exporting Report", description: "Generating PDF analysis report..." })}
+            onClick={handleExportReport}
           >
             Export Report
           </Button>

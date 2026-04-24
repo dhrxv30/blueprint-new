@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Send, Bot, AlertCircle } from "lucide-react";
+import { BACKEND_BASE } from "@/lib/config";
 
 type Message = {
   id: string;
@@ -95,7 +96,7 @@ export default function Chat() {
 
       const context = raw ? JSON.parse(raw) : {};
 
-      const response = await fetch("http://localhost:5000/api/chat", {
+      const response = await fetch(`${BACKEND_BASE}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
