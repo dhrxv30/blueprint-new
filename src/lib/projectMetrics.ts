@@ -1,5 +1,6 @@
 export interface TaskLike {
   complexity?: number | null;
+  dependencies?: unknown[];
 }
 
 export interface AnalysisLike {
@@ -13,11 +14,26 @@ export interface AnalysisLike {
   traceability?: unknown;
   devops?: unknown;
   ambiguities?: unknown[];
+  postmanCollection?: unknown;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-export function normalizeHealthScore(rawHealthScore: unknown, ambiguities: unknown[] = []): number {
+function getTaskPoints(tasks: TaskLike[] = []): number {
+  return tasks.reduce((sum, task) => {
+    const points = Number(task?.complexity);
+    return Number.isFinite(points) && points > 0 ? sum + points : sum + 3;
+  }, 0);
+}
+
+function getDependencyCount(tasks: TaskLike[] = []): number {
+  return tasks.reduce((sum, task) => {
+    const deps = Array.isArray(task?.dependencies) ? task.dependencies.length : 0;
+    return sum + deps;
+  }, 0);
+}
+
+export function normalizeHealthScore(rawHealthScore: unknown, ambiguities: unknown[] = [], completeness = 0): number {
   const directScore = typeof rawHealthScore === "number"
     ? rawHealthScore
     : (rawHealthScore as { score?: number } | null)?.score;
@@ -26,44 +42,55 @@ export function normalizeHealthScore(rawHealthScore: unknown, ambiguities: unkno
     return clamp(Math.round(directScore), 0, 100);
   }
 
-  const ambiguityPenalty = ambiguities.length * 5;
-  return clamp(95 - ambiguityPenalty, 10, 95);
+  const ambiguityPenalty = ambiguities.length * 4;
+  const completenessBonus = Math.round(completeness * 0.12);
+  return clamp(70 + completenessBonus - ambiguityPenalty, 10, 92);
 }
 
-export function calculateComplexity(tasks: TaskLike[] = []): "Low" | "Medium" | "High" {
-  const totalPoints = tasks.reduce((sum, task) => {
-    const points = Number(task?.complexity);
-    return Number.isFinite(points) && points > 0 ? sum + points : sum + 3;
-  }, 0);
+export function calculateComplexity(tasks: TaskLike[] = [], ambiguities: unknown[] = []): "Low" | "Medium" | "High" {
+  const totalPoints = getTaskPoints(tasks);
+  const dependencyCount = getDependencyCount(tasks);
+  const ambiguityPressure = ambiguities.length;
 
-  if (totalPoints > 80) return "High";
-  if (totalPoints > 30) return "Medium";
+  const weightedScore = totalPoints + dependencyCount * 1.5 + ambiguityPressure * 2;
+
+  if (weightedScore > 95) return "High";
+  if (weightedScore > 40) return "Medium";
   return "Low";
 }
 
-export function calculateTimelineWeeks(tasks: TaskLike[] = []): number {
-  const points = tasks.reduce((sum, task) => {
-    const value = Number(task?.complexity);
-    return Number.isFinite(value) && value > 0 ? sum + value : sum + 3;
-  }, 0);
+export function calculateTimelineWeeks(
+  tasks: TaskLike[] = [],
+  opts?: { ambiguities?: unknown[]; plannedSprints?: number }
+): number {
+  const points = getTaskPoints(tasks);
+  const dependencyCount = getDependencyCount(tasks);
+  const ambiguityCount = opts?.ambiguities?.length ?? 0;
+  const plannedSprints = opts?.plannedSprints ?? 0;
 
-  const weeklyCapacityPoints = 20;
-  return Math.max(1, Math.ceil(points / weeklyCapacityPoints));
+  const baseWeeklyCapacityPoints = 20;
+  const riskMultiplier = 1 + Math.min(0.6, dependencyCount * 0.02 + ambiguityCount * 0.03);
+  const pointDrivenEstimate = Math.ceil((points * riskMultiplier) / baseWeeklyCapacityPoints);
+
+  return Math.max(1, plannedSprints, pointDrivenEstimate);
 }
 
 export function calculateCompleteness(analysis: AnalysisLike): number {
-  const checks = [
-    Array.isArray(analysis.features) && analysis.features.length > 0,
-    Array.isArray(analysis.stories) && analysis.stories.length > 0,
-    Array.isArray(analysis.tasks) && analysis.tasks.length > 0,
-    Array.isArray(analysis.sprints) && analysis.sprints.length > 0,
-    !!analysis.architecture,
-    !!analysis.codeStructure,
-    Array.isArray(analysis.tests) && analysis.tests.length > 0,
-    !!analysis.traceability,
-    !!analysis.devops,
+  const weightedChecks: Array<{ present: boolean; weight: number }> = [
+    { present: Array.isArray(analysis.features) && analysis.features.length > 0, weight: 12 },
+    { present: Array.isArray(analysis.stories) && analysis.stories.length > 0, weight: 10 },
+    { present: Array.isArray(analysis.tasks) && analysis.tasks.length > 0, weight: 14 },
+    { present: Array.isArray(analysis.sprints) && analysis.sprints.length > 0, weight: 10 },
+    { present: !!analysis.architecture, weight: 14 },
+    { present: !!analysis.codeStructure, weight: 10 },
+    { present: Array.isArray(analysis.tests) && analysis.tests.length > 0, weight: 10 },
+    { present: !!analysis.traceability, weight: 10 },
+    { present: !!analysis.devops, weight: 5 },
+    { present: !!analysis.postmanCollection, weight: 5 },
   ];
 
-  const passed = checks.filter(Boolean).length;
-  return Math.round((passed / checks.length) * 100);
+  const earned = weightedChecks.reduce((sum, check) => sum + (check.present ? check.weight : 0), 0);
+  const total = weightedChecks.reduce((sum, check) => sum + check.weight, 0);
+
+  return clamp(Math.round((earned / total) * 100), 0, 100);
 }

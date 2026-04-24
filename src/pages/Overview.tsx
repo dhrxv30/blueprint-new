@@ -69,10 +69,13 @@ export default function Overview() {
           const aiSprints = Array.isArray(parsed.sprints) ? parsed.sprints : [];
           const aiAmbiguities = Array.isArray(parsed.ambiguities) ? parsed.ambiguities : [];
 
-          const calculatedComplexity = calculateComplexity(aiTasks);
-          const estimatedWeeks = calculateTimelineWeeks(aiTasks);
-          const finalHealthScore = normalizeHealthScore(parsed.healthScore, aiAmbiguities);
           const completeness = calculateCompleteness(parsed);
+          const calculatedComplexity = calculateComplexity(aiTasks, aiAmbiguities);
+          const estimatedWeeks = calculateTimelineWeeks(aiTasks, {
+            ambiguities: aiAmbiguities,
+            plannedSprints: aiSprints.length
+          });
+          const finalHealthScore = normalizeHealthScore(parsed.healthScore, aiAmbiguities, completeness);
 
           // Safely format features (handling both string and object responses from Gemini)
           const formattedFeatures = aiFeatures.map((f: any, i: number) => {

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { FileText, ListTodo, Zap, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { calculateComplexity, calculateTimelineWeeks, normalizeHealthScore } from "@/lib/projectMetrics";
+import { calculateCompleteness, calculateComplexity, calculateTimelineWeeks, normalizeHealthScore } from "@/lib/projectMetrics";
 
 interface ParsedData {
   projectName: string;
@@ -19,6 +19,7 @@ interface ParsedData {
   ambiguities?: any[];
   clarifications?: any[];
   architecture?: any;
+  sprints?: any[];
 }
 
 export default function Analysis() {
@@ -38,7 +39,8 @@ export default function Analysis() {
             try {
               const parsed = JSON.parse(rawData);
               const extractedAmbigs = Array.isArray(parsed.ambiguities) ? parsed.ambiguities : [];
-              const finalHs = normalizeHealthScore(parsed.healthScore, extractedAmbigs);
+              const completeness = calculateCompleteness(parsed);
+              const finalHs = normalizeHealthScore(parsed.healthScore, extractedAmbigs, completeness);
 
               setData({ ...parsed, healthScore: { score: finalHs, issues: parsed.healthScore?.issues || extractedAmbigs } });
             } catch (e) {
@@ -58,8 +60,10 @@ export default function Analysis() {
         const analysis = await response.json();
         
         const extractedAmbiguities = Array.isArray(analysis.ambiguities) ? analysis.ambiguities : [];
-          
-        const finalHealthScore = normalizeHealthScore(analysis.healthScore, extractedAmbiguities);
+        const extractedSprints = Array.isArray(analysis.sprints) ? analysis.sprints : [];
+        const completeness = calculateCompleteness(analysis);
+
+        const finalHealthScore = normalizeHealthScore(analysis.healthScore, extractedAmbiguities, completeness);
 
         setData({
           projectName: analysis.projectName || "Architecture Analysis",
@@ -69,7 +73,8 @@ export default function Analysis() {
           healthScore: { score: finalHealthScore, issues: analysis.healthScore?.issues || extractedAmbiguities },
           ambiguities: extractedAmbiguities,
           clarifications: Array.isArray(analysis.clarifications) ? analysis.clarifications : [],
-          architecture: typeof analysis.architecture === 'string' ? JSON.parse(analysis.architecture) : (analysis.architecture || { nodes: [], edges: [] })
+          architecture: typeof analysis.architecture === 'string' ? JSON.parse(analysis.architecture) : (analysis.architecture || { nodes: [], edges: [] }),
+          sprints: extractedSprints
         });
       } catch (err: any) {
         console.error(err);
@@ -107,8 +112,11 @@ export default function Analysis() {
   }
 
   const totalTasks = data.tasks?.length || 0;
-  const estimatedWeeks = calculateTimelineWeeks(data.tasks || []);
-  const overallComplexity = calculateComplexity(data.tasks || []);
+  const estimatedWeeks = calculateTimelineWeeks(data.tasks || [], {
+    ambiguities: data.ambiguities || [],
+    plannedSprints: data.sprints?.length || 0
+  });
+  const overallComplexity = calculateComplexity(data.tasks || [], data.ambiguities || []);
 
   return (
     <DashboardLayout>

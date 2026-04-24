@@ -54,6 +54,20 @@ export default function Automation() {
   const [slackWorkspace, setSlackWorkspace] = useState<string>("");
   const [slackSelectedChannelName, setSlackSelectedChannelName] = useState<string>("");
 
+  // ── ClickUp state ──────────────────────────────────────────
+  const [clickupWorkspaceName, setClickupWorkspaceName] = useState<string>("");
+  const [clickupWorkspaces, setClickupWorkspaces] = useState<Array<{ id: string; name: string }>>([]);
+  const [clickupSpaces, setClickupSpaces] = useState<Array<{ id: string; name: string }>>([]);
+  const [clickupFolders, setClickupFolders] = useState<Array<{ id: string; name: string }>>([]);
+  const [clickupLists, setClickupLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedWorkspace, setSelectedWorkspace] = useState<string>("");
+  const [selectedSpace, setSelectedSpace] = useState<string>("");
+  const [selectedFolder, setSelectedFolder] = useState<string>("");
+  const [selectedList, setSelectedList] = useState<string>("");
+  const [clickupLinkedList, setClickupLinkedList] = useState<string>("");
+  const [pushSprintName, setPushSprintName] = useState<string>("");
+  const [showPushModal, setShowPushModal] = useState(false);
+
   const integrations = [
     { id: "github", name: "GitHub", desc: "Push scaffolded code directly to your repositories.", icon: Github },
     { id: "clickup", name: "ClickUp", desc: "Push sprints and tasks to your ClickUp Workspace.", icon: ClickUpIcon },
@@ -212,6 +226,172 @@ export default function Automation() {
     setSlackSelectedChannelName("");
   };
 
+  // ── ClickUp helpers ────────────────────────────────────────
+
+  const loadClickUpState = async (currentProfileId: string) => {
+    if (!currentProfileId) {
+      setConnections((prev) => ({ ...prev, clickup: false }));
+      return;
+    }
+
+    try {
+      const res = await fetch(`${backendBase}/api/clickup/connection?profileId=${encodeURIComponent(currentProfileId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const connected = Boolean(data?.connected);
+
+      setConnections((prev) => ({ ...prev, clickup: connected }));
+      setClickupWorkspaceName(data?.connection?.workspaceName || "");
+
+      if (connected) {
+        try {
+          const wRes = await fetch(`${backendBase}/api/clickup/workspaces?profileId=${encodeURIComponent(currentProfileId)}`);
+          if (wRes.ok) {
+            const wData = await wRes.json();
+            setClickupWorkspaces(wData?.workspaces || []);
+          }
+        } catch { /* ignore */ }
+      }
+    } catch {
+      setConnections((prev) => ({ ...prev, clickup: false }));
+    }
+  };
+
+  const connectClickUp = async () => {
+    if (!profileId) {
+      toast({ title: "Profile missing", description: "Login required to connect ClickUp.", variant: "destructive" });
+      return;
+    }
+
+    const params = new URLSearchParams({ profileId });
+    // removed projectId from oauth start since it causes state size issues
+
+    window.location.href = `${backendBase}/api/clickup/oauth/start?${params.toString()}`;
+  };
+
+  const handleDisconnectClickUp = async () => {
+    const res = await fetch(`${backendBase}/api/clickup/disconnect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Failed to disconnect ClickUp.");
+
+    setConnections((prev) => ({ ...prev, clickup: false }));
+    setClickupWorkspaces([]);
+    setClickupSpaces([]);
+    setClickupFolders([]);
+    setClickupLists([]);
+    setSelectedWorkspace("");
+    setSelectedSpace("");
+    setSelectedFolder("");
+    setSelectedList("");
+    setClickupWorkspaceName("");
+    setClickupLinkedList("");
+  };
+
+  const loadClickUpSpaces = async (workspaceId: string) => {
+    setSelectedWorkspace(workspaceId);
+    setClickupSpaces([]);
+    setClickupFolders([]);
+    setClickupLists([]);
+    setSelectedSpace("");
+    setSelectedFolder("");
+    setSelectedList("");
+    try {
+      const res = await fetch(`${backendBase}/api/clickup/spaces?profileId=${encodeURIComponent(profileId)}&workspaceId=${encodeURIComponent(workspaceId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setClickupSpaces(data?.spaces || []);
+      }
+    } catch (e) { console.error("Failed to load spaces", e); }
+  };
+
+  const loadClickUpFolders = async (spaceId: string) => {
+    setSelectedSpace(spaceId);
+    setClickupFolders([]);
+    setClickupLists([]);
+    setSelectedFolder("");
+    setSelectedList("");
+    try {
+      const res = await fetch(`${backendBase}/api/clickup/folders?profileId=${encodeURIComponent(profileId)}&spaceId=${encodeURIComponent(spaceId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setClickupFolders(data?.folders || []);
+      }
+    } catch (e) { console.error("Failed to load folders", e); }
+    // Also load folderless lists
+    try {
+      const res = await fetch(`${backendBase}/api/clickup/lists?profileId=${encodeURIComponent(profileId)}&spaceId=${encodeURIComponent(spaceId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setClickupLists(data?.lists || []);
+      }
+    } catch (e) { console.error("Failed to load lists", e); }
+  };
+
+  const loadClickUpLists = async (folderId: string) => {
+    setSelectedFolder(folderId);
+    setClickupLists([]);
+    setSelectedList("");
+    try {
+      const res = await fetch(`${backendBase}/api/clickup/lists?profileId=${encodeURIComponent(profileId)}&spaceId=${encodeURIComponent(selectedSpace)}&folderId=${encodeURIComponent(folderId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setClickupLists(data?.lists || []);
+      }
+    } catch (e) { console.error("Failed to load lists", e); }
+  };
+
+  const linkClickUpListAction = async () => {
+    if (!projectId) throw new Error("Upload PRD first so projectId exists.");
+    if (!selectedList) throw new Error("Select a list first.");
+
+    const listObj = clickupLists.find(l => l.id === selectedList);
+    const res = await fetch(`${backendBase}/api/clickup/link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profileId,
+        projectId,
+        workspaceId: selectedWorkspace,
+        spaceId: selectedSpace,
+        folderId: selectedFolder || undefined,
+        listId: selectedList,
+        listName: listObj?.name,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Failed to link list.");
+    setClickupLinkedList(listObj?.name || selectedList);
+  };
+
+  const pushSprintToClickUp = async () => {
+    if (!projectId) throw new Error("Upload PRD first so projectId exists.");
+    if (!selectedWorkspace || !selectedSpace || !pushSprintName.trim()) {
+      throw new Error("Select workspace, space, and enter a sprint name.");
+    }
+
+    const res = await fetch(`${backendBase}/api/clickup/push-sprint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profileId,
+        projectId,
+        workspaceId: selectedWorkspace,
+        spaceId: selectedSpace,
+        folderId: selectedFolder || undefined,
+        sprintName: pushSprintName.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Failed to push sprint.");
+    setShowPushModal(false);
+    setPushSprintName("");
+    return data;
+  };
+
   // ── Init ───────────────────────────────────────────────────
 
   useEffect(() => {
@@ -237,6 +417,7 @@ export default function Automation() {
 
       await loadGitHubState(effectiveProfileId, effectiveProjectId);
       await loadSlackState(effectiveProfileId);
+      await loadClickUpState(effectiveProfileId);
 
       // Handle post-OAuth redirects
       const githubParam = searchParams.get("github");
@@ -244,6 +425,13 @@ export default function Automation() {
         toast({ title: "GitHub connected", description: "Your GitHub account is now connected." });
       } else if (githubParam === "error") {
         toast({ title: "GitHub error", description: searchParams.get("message") || "OAuth failed.", variant: "destructive" });
+      }
+
+      const clickupParam = searchParams.get("clickup");
+      if (clickupParam === "connected") {
+        toast({ title: "ClickUp connected", description: "Your ClickUp workspace is now connected." });
+      } else if (clickupParam === "error") {
+        toast({ title: "ClickUp error", description: searchParams.get("message") || "OAuth failed.", variant: "destructive" });
       }
 
       const slackParam = searchParams.get("slack");
@@ -396,15 +584,29 @@ export default function Automation() {
       return;
     }
 
+    if (id === "clickup") {
+      if (nextState) {
+        setBusy(true);
+        connectClickUp()
+          .catch((error: any) => toast({ title: "ClickUp connect failed", description: error.message, variant: "destructive" }))
+          .finally(() => setBusy(false));
+      } else {
+        setBusy(true);
+        handleDisconnectClickUp()
+          .then(() => toast({ title: "ClickUp disconnected" }))
+          .catch((error: any) => toast({ title: "ClickUp disconnect failed", description: error.message, variant: "destructive" }))
+          .finally(() => setBusy(false));
+      }
+      return;
+    }
+
     if (id === "slack") {
       if (nextState) {
-        // Connect
         setBusy(true);
         connectSlack()
           .catch((error: any) => toast({ title: "Slack connect failed", description: error.message, variant: "destructive" }))
           .finally(() => setBusy(false));
       } else {
-        // Disconnect
         setBusy(true);
         disconnectSlack()
           .then(() => toast({ title: "Slack disconnected" }))
@@ -413,9 +615,6 @@ export default function Automation() {
       }
       return;
     }
-
-    // ClickUp – simple toggle
-    setConnections(prev => ({ ...prev, [id]: nextState }));
   };
 
   // ── Render ─────────────────────────────────────────────────
@@ -531,6 +730,140 @@ export default function Automation() {
                         Push
                       </Button>
                     </div>
+                  </div>
+                )}
+
+                {/* ── ClickUp card body ── */}
+                {int.id === "clickup" && connections.clickup && (
+                  <div className="mt-4 space-y-3">
+                    <div className="text-xs text-zinc-500 break-all">workspace: {clickupWorkspaceName || "(unknown)"}</div>
+                    <div className="text-xs text-zinc-500 break-all">linked list: {clickupLinkedList || "(not linked)"}</div>
+
+                    <div className="space-y-2">
+                      <Label className="text-zinc-300">Workspace</Label>
+                      <Select value={selectedWorkspace} onValueChange={(val) => { loadClickUpSpaces(val); }}>
+                        <SelectTrigger className="bg-zinc-950 border-zinc-700 text-zinc-200">
+                          <SelectValue placeholder="Choose workspace" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                          {clickupWorkspaces.length === 0 && (
+                            <div className="px-2 py-2 text-xs text-zinc-400">No workspaces found.</div>
+                          )}
+                          {clickupWorkspaces.map((w) => (
+                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {selectedWorkspace && (
+                      <div className="space-y-2">
+                        <Label className="text-zinc-300">Space</Label>
+                        <Select value={selectedSpace} onValueChange={(val) => { loadClickUpFolders(val); }}>
+                          <SelectTrigger className="bg-zinc-950 border-zinc-700 text-zinc-200">
+                            <SelectValue placeholder="Choose space" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                            {clickupSpaces.length === 0 && (
+                              <div className="px-2 py-2 text-xs text-zinc-400">No spaces found.</div>
+                            )}
+                            {clickupSpaces.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {selectedSpace && clickupFolders.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-zinc-300">Folder <span className="text-zinc-500">(optional)</span></Label>
+                        <Select value={selectedFolder} onValueChange={(val) => { loadClickUpLists(val); }}>
+                          <SelectTrigger className="bg-zinc-950 border-zinc-700 text-zinc-200">
+                            <SelectValue placeholder="Choose folder (optional)" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                            {clickupFolders.map((f) => (
+                              <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {selectedSpace && clickupLists.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-zinc-300">List</Label>
+                        <Select value={selectedList} onValueChange={setSelectedList}>
+                          <SelectTrigger className="bg-zinc-950 border-zinc-700 text-zinc-200">
+                            <SelectValue placeholder="Choose list" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-100">
+                            {clickupLists.map((l) => (
+                              <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button className="w-full" disabled={busy || !selectedList} onClick={() => {
+                        setBusy(true);
+                        linkClickUpListAction()
+                          .then(() => toast({ title: "List linked" }))
+                          .catch((error: any) => toast({ title: "Link failed", description: error.message, variant: "destructive" }))
+                          .finally(() => setBusy(false));
+                      }}>
+                        Link List
+                      </Button>
+                    </div>
+
+                    {/* Push Sprint */}
+                    {showPushModal ? (
+                      <div className="space-y-2 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
+                        <Label className="text-zinc-300">Sprint Name</Label>
+                        <Input
+                          placeholder="e.g. Sprint 1"
+                          value={pushSprintName}
+                          onChange={(e) => setPushSprintName(e.target.value)}
+                          className="bg-zinc-900 border-zinc-700 text-zinc-100"
+                        />
+                        <div className="flex gap-2">
+                          <Button className="w-full bg-primary" disabled={busy || !pushSprintName.trim() || !selectedWorkspace || !selectedSpace} onClick={() => {
+                            setBusy(true);
+                            pushSprintToClickUp()
+                              .then((data) => toast({ title: "Sprint pushed!", description: `${data?.createdTasks || 0} tasks created in ClickUp.` }))
+                              .catch((error: any) => toast({ title: "Push failed", description: error.message, variant: "destructive" }))
+                              .finally(() => setBusy(false));
+                          }}>
+                            Push Sprint
+                          </Button>
+                          <Button variant="outline" className="border-zinc-700 text-zinc-400" onClick={() => { setShowPushModal(false); setPushSprintName(""); }}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button variant="outline" className="w-full border-blue-500/30 text-blue-400 hover:bg-blue-500/10" disabled={busy || !selectedWorkspace || !selectedSpace} onClick={() => setShowPushModal(true)}>
+                        Push Sprint to ClickUp
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      className="w-full border-red-800/30 text-red-400 hover:bg-red-950/20"
+                      disabled={busy}
+                      onClick={() => {
+                        setBusy(true);
+                        handleDisconnectClickUp()
+                          .then(() => toast({ title: "ClickUp disconnected" }))
+                          .catch((error: any) => toast({ title: "Disconnect failed", description: error.message, variant: "destructive" }))
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      Disconnect
+                    </Button>
                   </div>
                 )}
 
