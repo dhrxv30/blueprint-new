@@ -142,8 +142,8 @@ export function buildTraceability(
         data: { 
           label: node.label, 
           type: "service", 
-          badge: (node.type || "service").toUpperCase(),
-          description: node.description || ""
+          badge: node.type.toUpperCase(),
+          description: node.description
         },
         position: { x: COLUMN_WIDTH * 3, y: implIdx * ROW_HEIGHT }
       });
@@ -193,7 +193,7 @@ export function buildTraceability(
       data: { 
         label: file.name, 
         type: "code", 
-        badge: (file.language || "code").toUpperCase(),
+        badge: file.language.toUpperCase(),
         description: `Path: ${file.path}`
       },
       position: { x: COLUMN_WIDTH * 3, y: implIdx * ROW_HEIGHT }
