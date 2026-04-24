@@ -14,10 +14,8 @@ export async function runPythonPdfParser(pdfBuffer: Buffer): Promise<any> {
         // 1. Write the buffer to a temporary file
         await fs.writeFile(tempPdfPath, pdfBuffer);
 
-        // 2. Resolve the path to the python script
-        // Assuming this is running from `blueprint-backend/dist/src/lib/pipeline` or similar depending on execution
-        // The pdf_parser is at `blueprint-new/pdf_parser/pdf_parser.py`
-        const scriptPath = path.resolve(__dirname, "../../../../pdf_parser/pdf_parser.py");
+        // 2. Resolve the path to the python script inside the backend architecture
+        const scriptPath = path.resolve(__dirname, "python/pdf_parser.py");
 
         // 3. Spawn the python process
         return await new Promise((resolve, reject) => {
