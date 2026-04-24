@@ -184,15 +184,15 @@ export default function PRDUpload() {
     } catch (err: any) {
       console.error("Upload error:", err);
       const message = err?.message || "Upload failed";
-      
+
       // Trigger Requestly SessionBook export to capture the network trace and video for debugging
       // @ts-ignore
       if (typeof window !== 'undefined' && window.RequestlySessionBook) {
         // @ts-ignore
         window.RequestlySessionBook.save();
         toast({
-           title: "Session Recorded for Debugging",
-           description: "A Requestly SessionBook debug report is being generated to help diagnose this pipeline failure.",
+          title: "Session Recorded for Debugging",
+          description: "A Requestly SessionBook debug report is being generated to help diagnose this pipeline failure.",
         });
       }
 
@@ -230,7 +230,7 @@ export default function PRDUpload() {
           </h1>
 
           <p className="text-zinc-400 mt-2">
-            Upload a PRD. Gemini will generate backlog, architecture and tests.
+            Submit your product specifications. Our synthesis engine will architect a high-fidelity backlog, technical blueprint, and comprehensive test suite-accelerating your path from requirement to code.
           </p>
 
         </div>
@@ -251,11 +251,10 @@ export default function PRDUpload() {
 
           <Card
             className={`bg-zinc-900 border-2 border-dashed p-16 text-center
-            ${
-              isDragging
+            ${isDragging
                 ? "border-primary bg-primary/10"
                 : "border-zinc-700"
-            }`}
+              }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}

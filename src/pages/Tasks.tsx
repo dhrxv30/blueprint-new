@@ -305,9 +305,13 @@ export default function Tasks() {
                         <Badge variant="outline" className="text-[10px] uppercase bg-zinc-950 border-zinc-700 text-zinc-400 whitespace-nowrap">
                           {task.type}
                         </Badge>
-                        <div className="flex items-center gap-2 min-w-[70px]">
-                          <span className={`w-2 h-2 rounded-full ${task.priority === 'High' || task.priority === 'Critical' ? 'bg-red-400' : task.priority === 'Medium' ? 'bg-yellow-400' : 'bg-green-400'}`} />
-                          <span className="text-xs text-zinc-400">{task.priority}</span>
+                        <div className="flex items-center gap-2 min-w-[80px]">
+                          <span className={`w-2 h-2 rounded-full shadow-[0_0_8px_-1px_rgba(0,0,0,0.3)] ${
+                            task.priority?.toLowerCase() === 'high' || task.priority?.toLowerCase() === 'critical' ? 'bg-red-500 shadow-red-500/40' : 
+                            task.priority?.toLowerCase() === 'medium' ? 'bg-amber-500 shadow-amber-500/40' : 
+                            'bg-green-500 shadow-green-500/40'
+                          }`} />
+                          <span className="text-xs text-zinc-400 font-medium">{task.priority}</span>
                         </div>
                         <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0" title="Story Points">
                           {task.points}

@@ -406,18 +406,6 @@ export default function Traceability() {
     resetAnalysis();
   };
 
-  const handleExport = () => {
-    const payload = { exportedAt: new Date().toISOString(), projectId, nodes, edges };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `traceability-${projectId || "demo"}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast({ title: "Traceability Exported", description: "Downloaded semantic traceability graph." });
-  };
-
   return (
     <DashboardLayout>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -429,11 +417,6 @@ export default function Traceability() {
           <p className="text-zinc-400 mt-1">
             Map semantic relationships (implements, depends_on, derived_from) across the stack.
           </p>
-        </div>
-        <div className="flex gap-3">
-          <Button className="bg-primary hover:brightness-110 text-white shadow-lg" onClick={handleExport}>
-            Export Semantic Graph
-          </Button>
         </div>
       </div>
 

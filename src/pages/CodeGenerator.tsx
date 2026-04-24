@@ -24,16 +24,6 @@ import { useSearchParams } from "react-router-dom";
 // ======================================
 // CUSTOM ICONS & TYPES
 // ======================================
-const VSCodeIcon = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 24 24" 
-    className={className} 
-    fill="currentColor" 
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-5.58-4.312a1.495 1.495 0 0 0-1.819.021L.348 5.629a1.494 1.494 0 0 0-.14 2.112l4.636 5.25L.208 18.24a1.494 1.494 0 0 0 .14 2.112l.618.503a1.495 1.495 0 0 0 1.819.021l5.58-4.312 9.46 8.63a1.494 1.494 0 0 0 1.705.29l4.94-2.377A1.5 1.5 0 0 0 24 21.785V5.214a1.5 1.5 0 0 0-.85-1.352zM18 18.962l-4.59-4.183L18 12V18.962zM4.215 15.895l-2.057-2.33 2.057-2.33 1.151 1.151-1.151 1.151z" />
-  </svg>
-);
 
 interface CodeFile {
   path: string;
@@ -290,15 +280,7 @@ export default function CodeGenerator() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" disabled className="bg-zinc-950 border-zinc-700 text-white hover:bg-zinc-800 gap-2" title="Coming soon">
-            <Terminal className="w-4 h-4" /> StackBlitz
-          </Button>
-
-          <Button variant="outline" disabled className="bg-zinc-950 border-zinc-700 text-white hover:bg-zinc-800 gap-2" title="Coming soon">
-            <VSCodeIcon className="w-4 h-4" /> VS Code
-          </Button>
-
-          <Button onClick={downloadZip} className="bg-primary hover:brightness-110 text-white gap-2">
+          <Button onClick={downloadZip} className="bg-primary hover:brightness-110 text-white gap-2 shadow-lg glow-primary">
             <Download className="w-4 h-4" /> Download ZIP
           </Button>
         </div>

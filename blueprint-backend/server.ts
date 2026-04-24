@@ -283,7 +283,74 @@ app.get("/api/projects/:projectId/tasks", async (req, res) => {
 });
 
 /**
- * 2.5 Update task status
+ * 2.5 Update task (general)
+ */
+app.put("/api/projects/:projectId/tasks/:taskId", async (req, res) => {
+  try {
+    const { projectId, taskId } = req.params;
+    const updateData = req.body;
+
+    const analysis = await prisma.pipelineAnalysis.findFirst({
+      where: { prdVersion: { projectId } },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!analysis) return res.status(404).json({ error: "No analysis found" });
+    const tasks = Array.isArray(analysis.tasks) ? (analysis.tasks as any[]) : [];
+    
+    const idx = tasks.findIndex((t: any) => t.id === taskId || t.taskId === taskId);
+    if (idx === -1) return res.status(404).json({ error: "Task not found" });
+
+    // Merge updates
+    tasks[idx] = { ...tasks[idx], ...updateData };
+
+    await prisma.pipelineAnalysis.update({
+      where: { id: analysis.id },
+      data: { tasks: tasks as any }
+    });
+
+    res.json({ success: true, task: tasks[idx] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 2.6 Create manual task
+ */
+app.post("/api/projects/:projectId/tasks", async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const newTask = req.body;
+
+    const analysis = await prisma.pipelineAnalysis.findFirst({
+      where: { prdVersion: { projectId } },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!analysis) return res.status(404).json({ error: "No analysis found" });
+    const tasks = Array.isArray(analysis.tasks) ? (analysis.tasks as any[]) : [];
+    
+    // Add to start of list
+    tasks.unshift({
+      ...newTask,
+      id: newTask.id || `MAN-${Date.now().toString().slice(-4)}`,
+      createdAt: new Date().toISOString()
+    });
+
+    await prisma.pipelineAnalysis.update({
+      where: { id: analysis.id },
+      data: { tasks: tasks as any }
+    });
+
+    res.json({ success: true, task: tasks[0] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * 2.7 Update task status
  */
 app.put("/api/projects/:projectId/tasks/:taskId/status", async (req, res) => {
   try {

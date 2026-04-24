@@ -103,7 +103,7 @@ export default function Processing() {
                 ? "Your blueprint is ready. Review the analysis, architecture, and generated tasks."
                 : error 
                 ? "There was an issue generating your blueprint. See the error details below."
-                : "Our AI is analyzing your document across multiple stages to build a resilient technical foundation."}
+                : "Our synthesis engine is executing a multi-stage architectural analysis to construct a resilient technical foundation for your project."}
             </p>
           </motion.div>
         </div>

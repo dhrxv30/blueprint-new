@@ -54,8 +54,8 @@ router.get("/ambiguities/next", async (req, res) => {
               projectId
             );
 
-            for (const q of analysis.ambiguities) {
-              const question = typeof q === 'string' ? q : q.description || q;
+            for (const q of (analysis.ambiguities as any[])) {
+              const question = typeof q === 'string' ? q : (q as any).description || q;
               await prisma.$executeRawUnsafe(
                 `INSERT INTO "Ambiguity" (id, "projectId", question, status, "createdAt") 
                  VALUES (gen_random_uuid(), $1::uuid, $2, 'PENDING', NOW())`,
@@ -277,24 +277,6 @@ ${JSON.stringify(existingTasks.slice(0, 30), null, 2)}
                 updated_fields: { type: Type.OBJECT }
               },
               required: ["task_id", "action"]
-            }
-          },
-          new_tasks: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                storyId: { type: Type.STRING },
-                featureId: { type: Type.STRING },
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-                type: { type: Type.STRING },
-                priority: { type: Type.STRING },
-                complexity: { type: Type.INTEGER },
-                dependencies: { type: Type.ARRAY, items: { type: Type.STRING } }
-              },
-              required: ["id", "title", "description", "type", "priority", "complexity"]
             }
           },
           new_tasks: {

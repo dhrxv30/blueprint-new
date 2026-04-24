@@ -50,9 +50,9 @@ const LANE_CONFIG: Record<string, { x: number; y: number; w: number; h: number; 
 const getLayoutedElements = (nodes: any[], edges: any[]) => {
   // 1. Initialize Global Graph for coordination
   const g = new dagre.graphlib.Graph({ compound: true });
-  g.setGraph({ 
-    rankdir: 'LR', 
-    nodesep: 80, 
+  g.setGraph({
+    rankdir: 'LR',
+    nodesep: 80,
     ranksep: 150,
     marginx: 100,
     marginy: 100
@@ -92,14 +92,14 @@ const getLayoutedElements = (nodes: any[], edges: any[]) => {
     // Distribute ranks evenly across the lane width
     const padding = 60;
     const availableWidth = config.w - 240; // 240 is approx node width + margin
-    const xOffset = rankCount > 1 
+    const xOffset = rankCount > 1
       ? (rankIndex / (rankCount - 1)) * availableWidth + padding
       : (config.w / 2) - 100;
 
     return {
       ...node,
-      position: { 
-        x: xOffset, 
+      position: {
+        x: xOffset,
         y: pos.y + 80 // Reduced offset for header
       },
     };
@@ -149,25 +149,25 @@ const AntigravityEdge = ({
 
   return (
     <>
-      <BaseEdge 
+      <BaseEdge
         id={id}
-        path={edgePath} 
-        markerEnd={markerEnd} 
-        style={{ 
-          ...style, 
-          strokeWidth: isHighlighted ? 2.5 : 1.5, 
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{
+          ...style,
+          strokeWidth: isHighlighted ? 2.5 : 1.5,
           stroke: isHighlighted ? '#ffffff' : (style.stroke || '#27272a'),
           opacity: isHighlighted ? 1 : (style.opacity || 0.3),
           transition: 'all 0.5s ease',
-        }} 
+        }}
       />
-      
+
       {/* SEMANTIC FLOW PARTICLES */}
       <circle r={isHighlighted ? "2.5" : "1.5"} fill={isHighlighted ? "#ffffff" : "#52525b"} style={{ filter: 'blur(1px)' }}>
-        <animateMotion 
-          dur={isHighlighted ? "1.5s" : "4s"} 
-          repeatCount="indefinite" 
-          path={edgePath} 
+        <animateMotion
+          dur={isHighlighted ? "1.5s" : "4s"}
+          repeatCount="indefinite"
+          path={edgePath}
         />
       </circle>
 
@@ -191,7 +191,7 @@ const AntigravityEdge = ({
   );
 };
 
-const nodeTypes = { 
+const nodeTypes = {
   unified: UnifiedNode,
   lane: LaneNode
 };
@@ -232,14 +232,14 @@ function ArchitectureContent() {
         const label = (n.label || "").toLowerCase();
         const type = (n.type || "").toLowerCase();
         let pid = (n.parentId || "").toLowerCase();
-        
+
         // Intelligent Lane Routing Heuristics
         let assignedLane = 'lane-app'; // Default
 
         // 1. Client Layer detection
         if (pid.includes('client') || label.includes('ui') || label.includes('extension') || label.includes('mobile') || label.includes('app') || type === 'client') {
           assignedLane = 'lane-clients';
-        } 
+        }
         // 2. Edge / Network Layer detection
         else if (pid.includes('edge') || label.includes('gateway') || label.includes('dns') || label.includes('load balancer') || label.includes('lb') || type === 'gateway') {
           assignedLane = 'lane-edge';
@@ -261,10 +261,10 @@ function ArchitectureContent() {
           id: n.id,
           parentId: assignedLane,
           type: 'unified',
-          data: { 
-            label: n.label, 
-            type: n.type || 'service', 
-            description: n.description 
+          data: {
+            label: n.label,
+            type: n.type || 'service',
+            description: n.description
           },
           position: { x: 0, y: 0 },
           extent: 'parent' as const
@@ -295,7 +295,7 @@ function ArchitectureContent() {
       })).filter((e: any) => e.source && e.target);
 
       const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(finalNodes, rawEdges);
-      
+
       // Initially set all edges to be slightly animated but subtle
       const initialEdges = layoutedEdges.map(e => ({
         ...e,
@@ -312,7 +312,7 @@ function ArchitectureContent() {
     }
   }, [projectId, fitView, toast, setNodes, setEdges]);
 
-  useEffect(() => { 
+  useEffect(() => {
     loadData().then(() => {
       const focusId = searchParams.get("focus");
       if (focusId) {
@@ -325,7 +325,7 @@ function ArchitectureContent() {
           }
         }, 1200);
       }
-    }); 
+    });
   }, [loadData, searchParams]);
 
   // SEMANTIC TRACING LOGIC
@@ -337,7 +337,7 @@ function ArchitectureContent() {
       if (visited.has(id)) return;
       visited.add(id);
       affectedNodeIds.add(id);
-      
+
       edges.forEach(edge => {
         if (edge.source === id) {
           affectedEdgeIds.add(edge.id);
@@ -416,15 +416,18 @@ function ArchitectureContent() {
       <div className="flex justify-between items-center mb-8 px-4">
         <div>
           <h1 className="text-3xl font-black text-white tracking-tighter flex items-center gap-3">
-            BLUEPRINT <span className="text-zinc-700">OS / ARCH</span>
+            ARCHITECTURE
           </h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <Button onClick={() => fitView({ padding: 0.1, duration: 500 })} variant="outline" className="h-10 bg-white/5 border-white/10 text-white hover:bg-white/10 rounded-xl">
-             CENTER VIEW
+            CENTER VIEW
           </Button>
-          <Button onClick={() => navigate(projectId ? `/dashboard/code?projectId=${projectId}` : "/dashboard/code")} className="h-10 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl px-6">
-            DEPLOY CODE
+          <Button 
+            onClick={() => navigate(projectId ? `/dashboard/traceability?projectId=${projectId}` : "/dashboard/traceability")} 
+            className="bg-primary hover:brightness-110 text-white gap-2 shadow-lg glow-orange h-10 px-6 rounded-xl font-bold"
+          >
+            VIEW TRACEABILITY
           </Button>
         </div>
       </div>
@@ -450,7 +453,7 @@ function ArchitectureContent() {
 
         <AnimatePresence>
           {selectedNode && (
-            <motion.div 
+            <motion.div
               initial={{ x: 300, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 300, opacity: 0 }}
@@ -503,7 +506,7 @@ function ArchitectureContent() {
                 </div>
 
                 <div className="pt-6">
-                  <Button 
+                  <Button
                     onClick={() => navigate(projectId ? `/dashboard/traceability?projectId=${projectId}&focus=${selectedNode.id}` : `/dashboard/traceability?focus=${selectedNode.id}`)}
                     className="w-full bg-white text-black hover:bg-zinc-200 font-bold rounded-xl h-12"
                   >

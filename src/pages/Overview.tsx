@@ -100,7 +100,7 @@ export default function Overview() {
 
           setData({
             name: parsed.projectName || "Untitled Project",
-            description: "AI-generated architecture roadmap based on your uploaded PRD requirements. The pipeline has successfully extracted features, stories, and engineering tasks.",
+            description: "Strategic engineering blueprint synthesized from your product requirements. Our engine has architected a high-fidelity roadmap across features, user stories, and technical execution tasks.",
             healthScore: finalHealthScore,
             completeness,
             complexity: calculatedComplexity,

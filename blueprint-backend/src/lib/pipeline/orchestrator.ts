@@ -441,8 +441,8 @@ For each task, provide at least one positive (happy path) and one negative (erro
                 if (healthData.ambiguities && healthData.ambiguities.length > 0) {
                   try {
                     console.log(`  📝 Seeding ${healthData.ambiguities.length} ambiguities via Raw SQL...`);
-                    for (const q of healthData.ambiguities) {
-                      const question = typeof q === 'string' ? q : q.description || q;
+                    for (const q of (healthData.ambiguities as any[])) {
+                      const question = typeof q === 'string' ? q : (q as any).description || q;
                       // Use raw SQL to bypass stale Prisma client field injection
                       await prisma.$executeRawUnsafe(
                         `INSERT INTO "Ambiguity" (id, "projectId", question, status, "createdAt") 

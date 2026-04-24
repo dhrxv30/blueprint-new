@@ -19,12 +19,30 @@ import {
   BookOpen,
   RefreshCcw,
   X,
-  ListTodo
+  ListTodo,
+  Edit,
+  Trash2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { BACKEND_BASE } from "@/lib/config";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Task {
   id: string;
@@ -35,6 +53,7 @@ interface Task {
   points: number;
   story: string;
   assignee: string;
+  description?: string;
 }
 
 export default function Sprints() {
@@ -48,6 +67,20 @@ export default function Sprints() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
+  // Task Dialog States
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [newTaskData, setNewTaskData] = useState<Partial<Task>>({
+    title: "",
+    description: "",
+    priority: "Medium",
+    type: "Backend",
+    points: 3,
+    status: "todo",
+    story: "Manual Task"
+  });
 
   // --- DATA LOADING ---
   useEffect(() => {
@@ -168,6 +201,44 @@ export default function Sprints() {
     
   }, [draggedTaskId, projectId]);
 
+  // --- TASK ACTIONS ---
+  const handleSaveNewTask = async () => {
+    if (!newTaskData.title) return;
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newTaskData, assignee: "Me" })
+      });
+      if (res.ok) {
+        const { task } = await res.json();
+        setTasks(prev => [task, ...prev]);
+        setIsAddModalOpen(false);
+        toast({ title: "Task added", description: "Your manual task has been saved." });
+      }
+    } catch (err) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to add task." });
+    }
+  };
+
+  const handleUpdateTask = async () => {
+    if (!editingTask) return;
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingTask)
+      });
+      if (res.ok) {
+        setTasks(prev => prev.map(t => t.id === editingTask.id ? editingTask : t));
+        setIsEditModalOpen(false);
+        toast({ title: "Task updated", description: "Changes have been saved." });
+      }
+    } catch (err) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to update task." });
+    }
+  };
+
   // --- UTILITY FUNCTIONS ---
   const getPriorityColor = (priority: string) => {
     switch (priority?.toLowerCase()) {
@@ -221,7 +292,8 @@ export default function Sprints() {
             className="h-6 w-6 text-zinc-500 hover:text-white -mr-2 -mt-2"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/dashboard/overview?projectId=${projectId}&taskId=${task.id}`);
+              setEditingTask(task);
+              setIsEditModalOpen(true);
             }}
           >
             <MoreHorizontal className="w-4 h-4" />
@@ -233,9 +305,14 @@ export default function Sprints() {
           <span className="truncate">{task.story}</span>
         </div>
         <div className="flex items-center justify-between mt-auto pt-3 border-t border-zinc-800/50">
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getPriorityColor(task.priority)}`}>
-            {task.priority}
-          </span>
+          <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${getPriorityColor(task.priority)}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              task.priority?.toLowerCase() === 'high' || task.priority?.toLowerCase() === 'critical' ? 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]' :
+              task.priority?.toLowerCase() === 'medium' ? 'bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]' :
+              'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]'
+            }`} />
+            {task.priority?.toUpperCase()}
+          </div>
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
               {task.points}
@@ -259,24 +336,24 @@ export default function Sprints() {
         </div>
         <div className="flex gap-3">
           <Button
+            className="bg-primary hover:brightness-110 text-primary-foreground gap-2 shadow-lg glow-orange h-10 px-6 rounded-xl font-bold"
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            <Plus className="w-4 h-4" /> ADD TASK
+          </Button>
+          <Button
             variant="outline"
-            className={`gap-2 transition-colors ${isFilterOpen ? 'bg-zinc-800 text-white border-zinc-600' : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:text-white'}`}
+            className={`gap-2 transition-colors rounded-xl h-10 ${isFilterOpen ? 'bg-zinc-800 text-white border-zinc-600' : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:text-white'}`}
             onClick={() => setIsFilterOpen(!isFilterOpen)}
           >
             <Filter className="w-4 h-4" /> {isFilterOpen ? "Hide Filters" : "Filter"}
           </Button>
           <Button
             variant="outline"
-            className="bg-zinc-950 border-blue-500/30 text-blue-400 hover:bg-blue-500/10 gap-2"
+            className="bg-zinc-950 border-blue-500/30 text-blue-400 hover:bg-blue-500/10 gap-2 rounded-xl h-10"
             onClick={syncToClickUp}
           >
             <RefreshCcw className="w-4 h-4" /> Push to ClickUp
-          </Button>
-          <Button
-            className="bg-primary hover:brightness-110 text-primary-foreground gap-2 shadow-[0_0_15px_-3px_rgba(249,115,22,0.4)]"
-            onClick={() => navigate(projectId ? `/dashboard/architecture?projectId=${projectId}` : '/dashboard/architecture')}
-          >
-            View Architecture <ArrowRight className="w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -293,130 +370,173 @@ export default function Sprints() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <div className="flex gap-2">
-              {['High', 'Medium', 'Low'].map(p => (
-                <Badge
-                  key={p}
-                  variant="outline"
-                  className={`cursor-pointer hover:bg-zinc-800 ${searchQuery.toLowerCase() === p.toLowerCase() ? 'bg-primary/20 border-primary text-primary' : 'bg-zinc-950 text-zinc-400'}`}
-                  onClick={() => setSearchQuery(searchQuery.toLowerCase() === p.toLowerCase() ? "" : p)}
-                >
-                  {p}
-                </Badge>
-              ))}
-            </div>
-            {searchQuery && (
-              <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")} className="text-zinc-500">
-                <X className="w-4 h-4 mr-2" /> Clear
-              </Button>
-            )}
           </CardContent>
         </Card>
       )}
 
-      <Tabs defaultValue="board" className="w-full">
-        <div className="flex items-center justify-between mb-6">
-          <TabsList className="bg-zinc-900 border border-zinc-800 text-zinc-400">
-            <TabsTrigger value="board" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white">Board</TabsTrigger>
-            <TabsTrigger value="list" className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white">List</TabsTrigger>
-          </TabsList>
+      {/* KANBAN BOARD */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[calc(100vh-16rem)] min-h-[600px]">
+        
+        {/* TO DO COLUMN */}
+        <div
+          className="flex flex-col bg-zinc-950/50 rounded-xl border border-zinc-800/50 p-4"
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, 'todo')}
+        >
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+              <CircleDashed className="w-4 h-4 text-zinc-500" />
+              To Do
+            </h2>
+            <span className="text-xs font-medium text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-full">
+              {filteredTasks.filter(t => t.status === 'todo').length}
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {filteredTasks.filter(t => t.status === 'todo').map(renderTaskCard)}
+          </div>
         </div>
 
-        <TabsContent value="board" className="m-0">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[calc(100vh-16rem)] min-h-[600px]">
-            
-            {/* TO DO COLUMN */}
-            <div
-              className="flex flex-col bg-zinc-950/50 rounded-xl border border-zinc-800/50 p-4"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'todo')}
-            >
-              <div className="flex items-center justify-between mb-4 px-1">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <CircleDashed className="w-4 h-4 text-zinc-500" />
-                  To Do
-                </h2>
-                <span className="text-xs font-medium text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-full">
-                  {filteredTasks.filter(t => t.status === 'todo').length}
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                {filteredTasks.filter(t => t.status === 'todo').map(renderTaskCard)}
-                {filteredTasks.filter(t => t.status === 'todo').length === 0 && (
-                  <div className="h-24 rounded-lg border-2 border-dashed border-zinc-800 flex items-center justify-center text-sm text-zinc-600">
-                    {searchQuery ? "No matching tasks" : "Drop tasks here"}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* IN PROGRESS COLUMN */}
-            <div
-              className="flex flex-col bg-zinc-950/50 rounded-xl border border-zinc-800/50 p-4"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'in-progress')}
-            >
-              <div className="flex items-center justify-between mb-4 px-1">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-blue-400" />
-                  In Progress
-                </h2>
-                <span className="text-xs font-medium text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-full">
-                  {filteredTasks.filter(t => t.status === 'in-progress').length}
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                {filteredTasks.filter(t => t.status === 'in-progress').map(renderTaskCard)}
-                {filteredTasks.filter(t => t.status === 'in-progress').length === 0 && (
-                  <div className="h-24 rounded-lg border-2 border-dashed border-zinc-800 flex items-center justify-center text-sm text-zinc-600">
-                    {searchQuery ? "No matching tasks" : "Drop tasks here"}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* DONE COLUMN */}
-            <div
-              className="flex flex-col bg-zinc-950/50 rounded-xl border border-zinc-800/50 p-4"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'done')}
-            >
-              <div className="flex items-center justify-between mb-4 px-1">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  Done
-                </h2>
-                <span className="text-xs font-medium text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-full">
-                  {filteredTasks.filter(t => t.status === 'done').length}
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                {filteredTasks.filter(t => t.status === 'done').map(renderTaskCard)}
-                {filteredTasks.filter(t => t.status === 'done').length === 0 && (
-                  <div className="h-24 rounded-lg border-2 border-dashed border-zinc-800 flex items-center justify-center text-sm text-zinc-600">
-                    {searchQuery ? "No matching tasks" : "Drop tasks here"}
-                  </div>
-                )}
-              </div>
-            </div>
-
+        {/* IN PROGRESS COLUMN */}
+        <div
+          className="flex flex-col bg-zinc-950/50 rounded-xl border border-zinc-800/50 p-4"
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, 'in-progress')}
+        >
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Clock className="w-4 h-4 text-blue-400" />
+              In Progress
+            </h2>
+            <span className="text-xs font-medium text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-full">
+              {filteredTasks.filter(t => t.status === 'in-progress').length}
+            </span>
           </div>
-        </TabsContent>
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {filteredTasks.filter(t => t.status === 'in-progress').map(renderTaskCard)}
+          </div>
+        </div>
 
-        <TabsContent value="list" className="m-0">
-          <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="p-0">
-              <div className="text-center py-20 text-zinc-500 flex flex-col items-center">
-                <ListTodo className="w-12 h-12 text-zinc-700 mb-4" />
-                <p>List view is currently in development.</p>
-                <Button variant="link" className="text-primary mt-2" onClick={() => document.querySelector<HTMLButtonElement>('[value="board"]')?.click()}>
-                  Return to Board
-                </Button>
+        {/* DONE COLUMN */}
+        <div
+          className="flex flex-col bg-zinc-950/50 rounded-xl border border-zinc-800/50 p-4"
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, 'done')}
+        >
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+              Done
+            </h2>
+            <span className="text-xs font-medium text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-full">
+              {filteredTasks.filter(t => t.status === 'done').length}
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {filteredTasks.filter(t => t.status === 'done').map(renderTaskCard)}
+          </div>
+        </div>
+      </div>
+
+      {/* ADD TASK MODAL */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Manual Task</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Task Title</Label>
+              <Input 
+                className="bg-zinc-950 border-zinc-800"
+                placeholder="Feature: Implement login sync"
+                value={newTaskData.title}
+                onChange={(e) => setNewTaskData({...newTaskData, title: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea 
+                className="bg-zinc-950 border-zinc-800 min-h-[100px]"
+                placeholder="Details about implementation..."
+                value={newTaskData.description}
+                onChange={(e) => setNewTaskData({...newTaskData, description: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select onValueChange={(v) => setNewTaskData({...newTaskData, priority: v})} defaultValue="Medium">
+                  <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                    <SelectItem value="High">High</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="Low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select onValueChange={(v) => setNewTaskData({...newTaskData, type: v})} defaultValue="Backend">
+                  <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                    <SelectItem value="Frontend">Frontend</SelectItem>
+                    <SelectItem value="Backend">Backend</SelectItem>
+                    <SelectItem value="Infrastructure">Infrastructure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveNewTask} className="bg-primary hover:brightness-110 text-white">Save Task</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT TASK MODAL */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Task: {editingTask?.id}</DialogTitle>
+          </DialogHeader>
+          {editingTask && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Task Title</Label>
+                <Input 
+                  className="bg-zinc-950 border-zinc-800"
+                  value={editingTask.title}
+                  onChange={(e) => setEditingTask({...editingTask, title: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select onValueChange={(v) => setEditingTask({...editingTask, priority: v})} defaultValue={editingTask.priority}>
+                  <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                    <SelectItem value="High">High</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="Low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateTask} className="bg-primary hover:brightness-110 text-white">Update Task</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </DashboardLayout>
   );
 }
