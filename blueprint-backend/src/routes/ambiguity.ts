@@ -49,18 +49,20 @@ router.get("/ambiguities/next", async (req, res) => {
             console.log(`[Fallback] Seeding ${analysis.ambiguities.length} ambiguities for project ${projectId}`);
             
             // Clear any existing PENDING ones to avoid duplicates during fallback
-            await (prisma as any).ambiguity.deleteMany({
-              where: { projectId: projectId as string, status: "PENDING" }
-            });
+            await prisma.$executeRawUnsafe(
+              `DELETE FROM "Ambiguity" WHERE "projectId" = $1::uuid AND status = 'PENDING'`,
+              projectId
+            );
 
-            await (prisma as any).ambiguity.createMany({
-              data: analysis.ambiguities.map((a: any) => ({
-                projectId: projectId as string,
-                question: typeof a === 'string' ? a : a.description || a,
-                status: "PENDING",
-                updatedAt: new Date()
-              }))
-            });
+            for (const q of analysis.ambiguities) {
+              const question = typeof q === 'string' ? q : q.description || q;
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO "Ambiguity" (id, "projectId", question, status, "createdAt") 
+                 VALUES (gen_random_uuid(), $1::uuid, $2, 'PENDING', NOW())`,
+                projectId,
+                question
+              );
+            }
 
             // Fetch the newly seeded first pending ambiguity
             ambiguity = await (prisma as any).ambiguity.findFirst({
@@ -295,16 +297,52 @@ ${JSON.stringify(existingTasks.slice(0, 30), null, 2)}
               required: ["id", "title", "description", "type", "priority", "complexity"]
             }
           },
+          new_tasks: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                storyId: { type: Type.STRING },
+                featureId: { type: Type.STRING },
+                title: { type: Type.STRING },
+                description: { type: Type.STRING },
+                type: { type: Type.STRING },
+                priority: { type: Type.STRING },
+                complexity: { type: Type.INTEGER },
+                dependencies: { type: Type.ARRAY, items: { type: Type.STRING } }
+              },
+              required: ["id", "title", "description", "type", "priority", "complexity"]
+            }
+          },
+          new_tests: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                taskId: { type: Type.STRING },
+                method: { type: Type.STRING },
+                endpoint: { type: Type.STRING },
+                description: { type: Type.STRING },
+                expected: { type: Type.STRING },
+                status: { type: Type.STRING },
+                category: { type: Type.STRING }
+              },
+              required: ["id", "taskId", "description", "expected"]
+            }
+          },
           architecture_updates: { type: Type.STRING },
           traceability_updates: { type: Type.ARRAY, items: { type: Type.OBJECT } }
         },
-        required: ["updated_prd", "task_updates", "new_tasks"]
+        required: ["updated_prd", "task_updates", "new_tasks", "new_tests"]
       };
 
       const refinementResult = await generateJSONResponse<{
         updated_prd: string;
         task_updates: Array<{ task_id: string; action: string; updated_fields?: any }>;
         new_tasks: any[];
+        new_tests: any[];
         architecture_updates?: string;
         traceability_updates?: any[];
       }>(
@@ -323,9 +361,10 @@ ${JSON.stringify(existingTasks.slice(0, 30), null, 2)}
         } as any
       });
 
-      // 9. Apply task updates to existing analysis
+      // 9. Apply updates to existing analysis
       if (analysis) {
         let updatedTasks = [...existingTasks];
+        let updatedTests = [...(analysis.tests as any[] || [])];
 
         // Apply updates to existing tasks
         for (const update of refinementResult.task_updates) {
@@ -337,12 +376,17 @@ ${JSON.stringify(existingTasks.slice(0, 30), null, 2)}
           }
         }
 
-        // Add new tasks (with isNew flag, avoid duplicates)
-        const existingIds = new Set(updatedTasks.map((t: any) => t.id));
+        // Add new tasks
+        const existingTaskIds = new Set(updatedTasks.map((t: any) => t.id));
         for (const newTask of refinementResult.new_tasks) {
-          if (!existingIds.has(newTask.id)) {
+          if (!existingTaskIds.has(newTask.id)) {
             updatedTasks.push({ ...newTask, isNew: true, status: "todo" });
           }
+        }
+
+        // Add new tests
+        for (const newTest of refinementResult.new_tests) {
+            updatedTests.push({ ...newTest, status: "pending" });
         }
 
         // Update architecture if provided
@@ -403,6 +447,7 @@ ${JSON.stringify(existingTasks.slice(0, 30), null, 2)}
           where: { id: analysis.id },
           data: {
             tasks: updatedTasks as any,
+            tests: updatedTests as any,
             architecture: updatedArchitecture,
             traceability: updatedTraceability as any,
           }

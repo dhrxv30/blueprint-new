@@ -254,10 +254,10 @@ export default function Testing({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo, projectId]);
 
   const updateTestStates = (tests: TestCase[]) => {
-    const functional = tests.filter((t: any) => t.category === "functional");
-    const edge = tests.filter((t: any) => t.category === "edge");
-    const negative = tests.filter((t: any) => t.category === "negative");
-    const unit = tests.filter((t: any) => t.category === "unit");
+    const functional = tests.filter((t: any) => t.category?.toLowerCase() === "functional");
+    const edge = tests.filter((t: any) => t.category?.toLowerCase() === "edge");
+    const negative = tests.filter((t: any) => t.category?.toLowerCase() === "negative");
+    const unit = tests.filter((t: any) => t.category?.toLowerCase() === "unit");
 
     setFunctionalTests(functional);
     setEdgeCaseTests(edge);

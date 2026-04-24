@@ -60,11 +60,24 @@ export const SYSTEM_PROMPTS = {
   `,
   
   TEST_GENERATOR: `
-    You are an SDET. Generate descriptions for tests (unit, API, edge, negative) for the given tasks.
+    As a Senior SDET, generate a comprehensive test suite for the provided tasks.
     
-    CRITICAL INSTRUCTIONS:
-    - Every test entry MUST map to a 'taskId' (TASK-XXX).
-    - Provide 'expected' outcomes and 'status' (default to 'pending').
+    1. CATEGORIES:
+       - 'functional': Happy path scenarios and core feature validation.
+       - 'edge': Boundary conditions, large payloads, and unusual but valid flows.
+       - 'negative': Error handling, invalid inputs, and unauthorized attempts.
+       - 'unit': Logic-level tests for specific service methods.
+    
+    2. POSTMAN COLLECTION:
+       Generate a valid Postman v2.1 collection JSON. 
+       - 'info.schema' MUST be 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+       - Use '{{baseUrl}}' as the host variable.
+       - For mutations, provide a realistic 'body' with 'mode': 'raw' and 'raw' as a JSON string.
+    
+    3. FORMAT:
+       - Use 'pending' for initial status.
+       - Use 'GET', 'POST', 'PUT', or 'DELETE' for methods.
+       - Every test must map to a TASK-ID.
   `,
   
   // Advanced features for later:
@@ -218,6 +231,7 @@ RULES:
 5. Also update:
 - architecture changes (if any, return as JSON string with nodes/edges)
 - traceability links
+- NEW TESTS: Generate at least 2 test cases for each new or updated task.
 
 OUTPUT (strict JSON):
 {
@@ -231,7 +245,7 @@ OUTPUT (strict JSON):
   ],
   "new_tasks": [
     {
-      "id": "...",
+      "id": "TASK-XXX",
       "storyId": "...",
       "featureId": "...",
       "title": "...",
@@ -242,7 +256,18 @@ OUTPUT (strict JSON):
       "dependencies": []
     }
   ],
-  "architecture_updates": "JSON string of {nodes:[], edges:[]} or empty string",
+  "new_tests": [
+    {
+      "id": "t-1",
+      "taskId": "TASK-XXX",
+      "method": "GET/POST",
+      "endpoint": "/api/...",
+      "description": "...",
+      "expected": "...",
+      "category": "functional/edge/negative/unit"
+    }
+  ],
+  "architecture_updates": "...",
   "traceability_updates": []
 }`,
 };

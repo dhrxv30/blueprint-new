@@ -268,6 +268,7 @@ app.get("/api/projects/:projectId/tasks", async (req, res) => {
           projectId: req.params.projectId,
         },
       },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!analysis) {
@@ -371,6 +372,7 @@ app.get("/api/projects/:projectId/architecture", async (req, res) => {
           projectId: req.params.projectId,
         },
       },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!analysis || !analysis.architecture) {
@@ -397,6 +399,7 @@ app.get("/api/projects/:projectId/code-structure", async (req, res) => {
           projectId: req.params.projectId,
         },
       },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!analysis) {
@@ -423,6 +426,7 @@ app.get("/api/projects/:projectId/tests", async (req, res) => {
           projectId: req.params.projectId,
         },
       },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!analysis) {
@@ -449,6 +453,7 @@ app.get("/api/projects/:projectId/devops", async (req, res) => {
           projectId: req.params.projectId,
         },
       },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!analysis) {

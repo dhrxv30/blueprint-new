@@ -297,19 +297,72 @@ Ensure every component in the architecture can be traced back to at least one TA
                             description: { type: Type.STRING },
                             expected: { type: Type.STRING },
                             status: { type: Type.STRING },
-                            category: { type: Type.STRING }
+                            category: { type: Type.STRING, description: "Must be: functional, edge, negative, or unit" }
                         }, 
-                        required: ["id", "taskId", "method", "endpoint", "description", "expected", "status", "category"] 
+                        required: ["id", "taskId", "method", "endpoint", "description", "expected", "category"] 
                     } 
                 },
-                postmanCollection: { type: Type.OBJECT }
+                postmanCollection: { 
+                    type: Type.OBJECT,
+                    properties: {
+                        info: { 
+                            type: Type.OBJECT,
+                            properties: {
+                                name: { type: Type.STRING },
+                                schema: { type: Type.STRING },
+                                _postman_id: { type: Type.STRING }
+                            },
+                            required: ["name", "schema"]
+                        },
+                        item: { 
+                            type: Type.ARRAY, 
+                            items: { 
+                                type: Type.OBJECT,
+                                properties: {
+                                    name: { type: Type.STRING },
+                                    request: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            method: { type: Type.STRING },
+                                            header: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+                                            url: {
+                                                type: Type.OBJECT,
+                                                properties: {
+                                                    raw: { type: Type.STRING },
+                                                    host: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                                    path: { type: Type.ARRAY, items: { type: Type.STRING } }
+                                                }
+                                            },
+                                            body: { type: Type.OBJECT }
+                                        },
+                                        required: ["method", "url"]
+                                    }
+                                },
+                                required: ["name", "request"]
+                            }
+                        }
+                    },
+                    required: ["info", "item"]
+                }
             },
             required: ["tests", "postmanCollection"]
         };
+        const testPrompt = `
+PRD CONTEXT:
+${normalizedText.slice(0, 4000)}
+
+TECHNICAL TASKS TO TEST:
+${tasks.map(t => `[${t.id}] ${t.title}: ${t.description}`).slice(0, 20).join("\n\n")}
+
+INSTRUCTIONS:
+Generate a comprehensive suite of API and unit tests. 
+For each task, provide at least one positive (happy path) and one negative (error case) test.
+`;
+
         return await routeTask<{ tests: any[], postmanCollection: any }>(
             "Testing",
             SYSTEM_PROMPTS.TEST_GENERATOR,
-            tasks.map(t=>t.title + ": " + t.description).slice(0,5).join("\n\n"),
+            testPrompt,
             schema
         );
       }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<any>)),
@@ -386,19 +439,22 @@ Ensure every component in the architecture can be traced back to at least one TA
             });
 
                 if (healthData.ambiguities && healthData.ambiguities.length > 0) {
-                  const dataToInsert = healthData.ambiguities.map((a: any) => ({
-                    projectId: job.projectId,
-                    question: typeof a === 'string' ? a : a.description || a,
-                    status: "PENDING"
-                  }));
-                  
-                  await (prisma as any).ambiguity.createMany({
-                    data: dataToInsert.map(d => ({
-                      ...d,
-                      updatedAt: new Date()
-                    }))
-                  });
-                  console.log(`  📝 Seeded ${dataToInsert.length} ambiguity questions for chat resolution`);
+                  try {
+                    console.log(`  📝 Seeding ${healthData.ambiguities.length} ambiguities via Raw SQL...`);
+                    for (const q of healthData.ambiguities) {
+                      const question = typeof q === 'string' ? q : q.description || q;
+                      // Use raw SQL to bypass stale Prisma client field injection
+                      await prisma.$executeRawUnsafe(
+                        `INSERT INTO "Ambiguity" (id, "projectId", question, status, "createdAt") 
+                         VALUES (gen_random_uuid(), $1::uuid, $2, 'PENDING', NOW())`,
+                        job.projectId,
+                        question
+                      );
+                    }
+                    console.log(`  ✅ Seeded successfully.`);
+                  } catch (rawErr) {
+                    console.error("  ❌ Raw SQL Seeding failed:", rawErr);
+                  }
                 }
         }
     }

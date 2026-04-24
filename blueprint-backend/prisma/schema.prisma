@@ -26,12 +26,12 @@ model Project {
   description       String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  ambiguities       Ambiguity[]
   clickupMapping    ClickUpMapping?
+  contextNotes      ContextNote[]
   githubRepoMapping GitHubRepoMapping?
   pipelineJobs      PipelineJob[]
   prdVersions       PrdVersion[]
-  ambiguities       Ambiguity[]
-  contextNotes      ContextNote[]
   profile           Profile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
 }
 
@@ -67,6 +67,7 @@ model PipelineAnalysis {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   postmanCollection Json       @default("{}")
+  completeness      Json       @default("{}")
   prdVersion        PrdVersion @relation(fields: [prdVersionId], references: [id], onDelete: Cascade)
 }
 
@@ -169,21 +170,17 @@ model ClickUpTaskMapping {
 model Ambiguity {
   id        String   @id @default(uuid()) @db.Uuid
   projectId String   @db.Uuid
-  question  String   @db.Text
-  answer    String?  @db.Text
+  question  String
+  answer    String?
   status    String   @default("PENDING")
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model ContextNote {
   id        String   @id @default(uuid()) @db.Uuid
   projectId String   @db.Uuid
-  content   String   @db.Text
+  content   String
   createdAt DateTime @default(now())
-
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
-
