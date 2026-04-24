@@ -432,7 +432,7 @@ export async function githubIntegrationHealthCheck() {
   const oauthConfigured = Boolean(
     process.env.GITHUB_CLIENT_ID &&
       process.env.GITHUB_CLIENT_SECRET &&
-      process.env.GITHUB_OAUTH_REDIRECT_URI
+      process.env.GITHUB_REDIRECT_URI
   );
 
   const webhookBaseUrl = (process.env.WEBHOOK_BASE_URL || "").trim();

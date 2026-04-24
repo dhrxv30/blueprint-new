@@ -217,6 +217,7 @@ export default function Automation() {
   useEffect(() => {
     const init = async () => {
       const queryProfileId = searchParams.get("profileId") || "";
+      const queryProjectId = searchParams.get("projectId") || "";
       const { data } = await supabase.auth.getUser();
       const userId = data?.user?.id || "";
       const storedProfileId = localStorage.getItem("profileId") || "";
@@ -227,10 +228,24 @@ export default function Automation() {
         localStorage.setItem("profileId", effectiveProfileId);
       }
 
-      await loadGitHubState(effectiveProfileId, projectId);
+      // Restore projectId from OAuth redirect URL if present
+      const effectiveProjectId = queryProjectId || projectId;
+      if (queryProjectId && queryProjectId !== projectId) {
+        setProjectId(queryProjectId);
+        localStorage.setItem("projectId", queryProjectId);
+      }
+
+      await loadGitHubState(effectiveProfileId, effectiveProjectId);
       await loadSlackState(effectiveProfileId);
 
       // Handle post-OAuth redirects
+      const githubParam = searchParams.get("github");
+      if (githubParam === "connected") {
+        toast({ title: "GitHub connected", description: "Your GitHub account is now connected." });
+      } else if (githubParam === "error") {
+        toast({ title: "GitHub error", description: searchParams.get("message") || "OAuth failed.", variant: "destructive" });
+      }
+
       const slackParam = searchParams.get("slack");
       if (slackParam === "connected") {
         toast({ title: "Slack connected", description: "Your Slack workspace is now connected." });
@@ -262,7 +277,12 @@ export default function Automation() {
       return;
     }
 
-    const res = await fetch(`${backendBase}/api/github/oauth/start?profileId=${encodeURIComponent(profileId)}`);
+    const params = new URLSearchParams({ profileId });
+    if (projectId) {
+      params.set("projectId", projectId);
+    }
+
+    const res = await fetch(`${backendBase}/api/github/oauth/start?${params.toString()}`);
     const data = await res.json();
 
     if (!res.ok || !data?.url) {
