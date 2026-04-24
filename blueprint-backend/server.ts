@@ -339,7 +339,16 @@ app.get("/api/projects/:projectId/traceability", async (req, res) => {
     const features = Array.isArray(analysis.features) ? (analysis.features as any[]) : [];
     const stories = Array.isArray(analysis.stories) ? (analysis.stories as any[]) : [];
     const tasks = Array.isArray(analysis.tasks) ? (analysis.tasks as any[]) : [];
-    const architecture = analysis.architecture ? JSON.parse(analysis.architecture as string) : null;
+    let architecture = null;
+    if (analysis.architecture) {
+      try {
+        architecture = typeof analysis.architecture === 'string' 
+          ? JSON.parse(analysis.architecture) 
+          : analysis.architecture;
+      } catch (e) {
+        console.warn("Failed to parse architecture JSON:", e);
+      }
+    }
     
     // Flatten code structure
     const codeFiles: any[] = [];

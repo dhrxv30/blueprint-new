@@ -389,17 +389,15 @@ Ensure every component in the architecture can be traced back to at least one TA
             if (healthData.ambiguities && healthData.ambiguities.length > 0) {
               try {
                 // Convert raw ambiguity strings to proper question objects
-                const ambiguityObjects = healthData.ambiguities.map((a: any, i: number) => ({
-                  id: `amb-${i + 1}`,
-                  description: typeof a === 'string' ? a : a.description || a,
-                  severity: typeof a === 'string' ? 'medium' : (a.severity || 'medium')
+                const ambiguityObjects = healthData.ambiguities.map((a: any) => ({
+                  question: typeof a === 'string' ? a : a.description || a,
                 }));
                 
                 if (ambiguityObjects.length > 0) {
                   await prisma.ambiguity.createMany({
                     data: ambiguityObjects.map(a => ({
                       projectId: job.projectId,
-                      question: a.description,
+                      question: a.question,
                       status: "PENDING"
                     }))
                   });

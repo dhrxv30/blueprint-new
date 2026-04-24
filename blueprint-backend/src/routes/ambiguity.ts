@@ -47,17 +47,15 @@ router.get("/ambiguities/next", async (req, res) => {
         if (analysis && analysis.ambiguities && Array.isArray(analysis.ambiguities) && analysis.ambiguities.length > 0) {
           try {
             console.log(`[Fallback] Seeding ${analysis.ambiguities.length} ambiguities for project ${projectId}`);
-            const ambiguityObjects = analysis.ambiguities.map((a: any, i: number) => ({
-              id: `amb-${i + 1}`,
-              description: typeof a === 'string' ? a : a.description || a,
-              severity: typeof a === 'string' ? 'medium' : (a.severity || 'medium')
+            const ambiguityObjects = analysis.ambiguities.map((a: any) => ({
+              question: typeof a === 'string' ? a : a.description || a,
             }));
 
             if (ambiguityObjects.length > 0) {
               await prisma.ambiguity.createMany({
                 data: ambiguityObjects.map(a => ({
                   projectId: projectId as string,
-                  question: a.description,
+                  question: a.question,
                   status: "PENDING"
                 }))
               });
@@ -316,7 +314,7 @@ ${JSON.stringify(existingTasks.slice(0, 30), null, 2)}
 
       // 8. Create new PRD version
       const newVersionNumber = latestVersion.versionNumber + 1;
-      await prisma.prdVersion.create({
+      const newPrdVersion = await prisma.prdVersion.create({
         data: {
           projectId,
           versionNumber: newVersionNumber,
@@ -399,13 +397,20 @@ ${JSON.stringify(existingTasks.slice(0, 30), null, 2)}
           }
         }
 
-        // Persist updated analysis
-        await prisma.pipelineAnalysis.update({
-          where: { id: analysis.id },
+        // Create a NEW analysis record for the NEW PRD version
+        await prisma.pipelineAnalysis.create({
           data: {
-            tasks: updatedTasks as any,
+            prdVersionId: newPrdVersion.id,
+            features: analysis.features as any, // Preserve existing features
+            stories: analysis.stories as any,   // Preserve existing stories
+            tasks: updatedTasks as any,         // Use updated tasks
+            sprints: analysis.sprints as any,
             architecture: updatedArchitecture,
             traceability: updatedTraceability as any,
+            devops: analysis.devops as any,
+            healthScore: analysis.healthScore as any,
+            postmanCollection: analysis.postmanCollection as any,
+            ambiguities: analysis.ambiguities as any
           }
         });
       }
