@@ -11,7 +11,7 @@ import { runPythonPdfParser } from "./pythonBridge.js";
 const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: process.env.DIRECT_URL as string
+      url: process.env.DATABASE_URL as string
     }
   }
 });
@@ -30,6 +30,20 @@ interface PRDHealth { healthScore: { score: number; issues: string[] }; ambiguit
 export async function processPrdJob(jobId: string, prdVersionId: string) {
   console.log(`\n🧵 Starting background processing for Job: ${jobId}`);
   
+  // Wait for the job record to be visible (handles eventual consistency/slow commits)
+  let job = null;
+  for (let i = 0; i < 5; i++) {
+    job = await prisma.pipelineJob.findUnique({ where: { id: jobId } });
+    if (job) break;
+    console.warn(`[Job ${jobId}] Record not found yet, retrying in 500ms...`);
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  if (!job) {
+    console.error(`[Job ${jobId}] FATAL: Job record never appeared in DB.`);
+    return;
+  }
+
   await prisma.pipelineJob.update({
     where: { id: jobId },
     data: { status: "IN_PROGRESS" }
@@ -40,20 +54,20 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
     const ingestResult = await runStage<any>(jobId, "Ingest & Normalize", async () => {
         try {
             const prdVersion = await prisma.prdVersion.findUnique({ where: { id: prdVersionId } });
-            if (!prdVersion || !prdVersion.pdfData) {
+            if (!prdVersion || !(prdVersion as any).pdfData) {
                  return { status: "failed", errors: ["No PDF data found in database"] };
             }
 
-            const parsedJson = await runPythonPdfParser(prdVersion.pdfData);
+            const parsedJson = await runPythonPdfParser((prdVersion as any).pdfData);
             
             // Save to DB
             const textContent = parsedJson.chunks.map((c: any) => c.content).join("\n");
             await prisma.prdVersion.update({
                 where: { id: prdVersionId },
                 data: { 
-                   parsedJson: parsedJson,
+                   parsedJson: parsedJson as any,
                    parsedText: textContent 
-                }
+                } as any
             });
 
             return { status: "success", data: parsedJson };
@@ -188,6 +202,10 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
 
     // Parallel Stages: Architecture Synthesis, Implementation Details, Test Planning, Health Analysis
     console.log("-> Launching parallel generation for Architecture, Implementation, Testing, and Health Analysis...");
+    // Parallel Stages: Architecture Synthesis, Implementation Details, Test Planning, Health Analysis
+    console.log("-> Launching parallel generation for Architecture, Implementation, Testing, and Health Analysis...");
+    
+    // We use individual try-catch or handle failure gracefully to ensure partial success
     const results = await Promise.all([
       runStage<Architecture>(jobId, "Architecture Synthesis", async () => {
         const schema: Schema = {
@@ -202,7 +220,7 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
                   label: { type: Type.STRING }, 
                   type: { type: Type.STRING }, 
                   description: { type: Type.STRING },
-                  parentId: { type: Type.STRING, description: "ID of the parent group node, if any" },
+                  parentId: { type: Type.STRING },
                   style: { type: Type.OBJECT, properties: { backgroundColor: { type: Type.STRING } } }
                 }, 
                 required: ["id", "label", "type", "description"] 
@@ -231,7 +249,8 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
           `Features:\n${features.map(f=>f.name).join(", ")}\n\nTasks:\n${tasks.map(t=>t.title).join(", ")}`,
           schema
         );
-      }),
+      }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<Architecture>)),
+
       runStage<{ codeFiles: CodeFile[], devops: DevOps }>(jobId, "Implementation Details", async () => {
         const schema: Schema = {
             type: Type.OBJECT,
@@ -243,11 +262,12 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
         };
         return await routeTask<{ codeFiles: CodeFile[], devops: DevOps }>(
             "Implementation",
-            `Generate boilerplate code and DevOps configs for these core tasks:\n${tasks.map(t=>t.title).slice(0,5).join("\n")}`,
+            `Generate production scaffold for these tasks:\n${tasks.map(t=>t.title).slice(0,5).join("\n")}`,
             normalizedText,
             schema
         );
-      }),
+      }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<any>)),
+
       runStage<{ tests: any[], postmanCollection: any }>(jobId, "Test Planning", async () => {
         const schema: Schema = {
             type: Type.OBJECT,
@@ -278,7 +298,8 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
             tasks.map(t=>t.title + ": " + t.description).slice(0,5).join("\n\n"),
             schema
         );
-      }),
+      }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<any>)),
+
       runStage<PRDHealth>(jobId, "Health & Ambiguity Analysis", async () => {
         const schema: Schema = {
             type: Type.OBJECT,
@@ -301,25 +322,19 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
             normalizedText,
             schema
         );
-      })
+      }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<PRDHealth>))
     ]);
 
     const [archResult, codeResult, testResult, healthResult] = results;
 
-    if (archResult.status === "failed" || codeResult.status === "failed" || testResult.status === "failed" || healthResult.status === "failed") {
-        await prisma.pipelineJob.update({
-            where: { id: jobId },
-            data: { status: "FAILED", error: "One or more parallel stages failed" }
-        });
-        return;
-    }
-
-    const architecture: Architecture = archResult.data!;
-    const codeFiles: CodeFile[] = codeResult.data!.codeFiles;
-    const devops: DevOps = codeResult.data!.devops;
-    const tests: any[] = testResult.data!.tests;
-    const postmanCollection = testResult.data!.postmanCollection;
-    const healthData: PRDHealth = healthResult.data!;
+    // We no longer fail the whole job if parallel stages fail.
+    // We proceed with whatever data we managed to get.
+    const architecture: Architecture = archResult.status === "success" ? archResult.data! : { nodes: [], edges: [] };
+    const codeFiles: CodeFile[] = codeResult.status === "success" ? codeResult.data!.codeFiles : [];
+    const devops: DevOps = codeResult.status === "success" ? codeResult.data!.devops : { dockerfile: "", githubActions: "", deploymentSteps: [] };
+    const tests: any[] = testResult.status === "success" ? testResult.data!.tests : [];
+    const postmanCollection = testResult.status === "success" ? testResult.data!.postmanCollection : {};
+    const healthData: PRDHealth = healthResult.status === "success" ? healthResult.data! : { healthScore: { score: 0, issues: ["Analysis failed"] }, ambiguities: [] };
 
     // Stage 7: Deterministic Post-Processing
     console.log("-> Running Deterministic Post-Processing...");

@@ -18,7 +18,7 @@ const app = express();
 const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: process.env.DIRECT_URL as string
+      url: process.env.DATABASE_URL as string
     }
   }
 });
@@ -74,22 +74,65 @@ app.post('/api/prd/upload', upload.single('prd'), async (req, res): Promise<any>
       });
     }
 
-    const savedProject = await prisma.project.create({
-      data: {
+    // CHECK IF PROJECT ALREADY EXISTS BY NAME
+    const existingProject = await prisma.project.findFirst({
+      where: { 
         profileId: userProfile.id,
-        name: projectName || req.file.originalname.replace(".pdf", ""),
-        prdVersions: {
-          create: {
-            versionNumber: 1,
-            pdfData: req.file.buffer,
-            parsedText: "Asynchronously processing PRD...",
-          },
-        },
+        name: projectName || req.file.originalname.replace(".pdf", "")
       },
       include: {
-        prdVersions: true
+        prdVersions: {
+          orderBy: { versionNumber: 'desc' },
+          take: 1
+        }
       }
     });
+
+    let savedProject: any;
+    let versionNumber = 1;
+
+    if (existingProject) {
+      console.log(`-> Updating existing project: ${existingProject.name}`);
+      versionNumber = (existingProject.prdVersions[0]?.versionNumber || 0) + 1;
+      
+      savedProject = await prisma.project.update({
+        where: { id: existingProject.id },
+        data: {
+          updatedAt: new Date(),
+          prdVersions: {
+            create: {
+              versionNumber: versionNumber,
+              pdfData: req.file.buffer,
+              parsedText: "Asynchronously processing new PRD version...",
+            } as any
+          }
+        },
+        include: {
+          prdVersions: {
+            orderBy: { versionNumber: 'desc' },
+            take: 1
+          }
+        }
+      });
+    } else {
+      console.log("-> Creating new project...");
+      savedProject = await prisma.project.create({
+        data: {
+          profileId: userProfile.id,
+          name: projectName || req.file.originalname.replace(".pdf", ""),
+          prdVersions: {
+            create: {
+              versionNumber: 1,
+              pdfData: req.file.buffer,
+              parsedText: "Asynchronously processing PRD...",
+            } as any,
+          },
+        },
+        include: {
+          prdVersions: true
+        }
+      });
+    }
 
     const prdVersionId = savedProject.prdVersions[0].id;
 
