@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { User, Bell, Shield, Palette, Globe, CreditCard, Zap, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
+import { BACKEND_BASE } from "@/lib/config";
 
 const settingsSections = [
   {
@@ -59,6 +62,54 @@ const planDetails = {
 
 export default function Settings() {
   const { toast } = useToast();
+  const [profileName, setProfileName] = useState("Engineering Team");
+  const [profileEmail, setProfileEmail] = useState("team@blueprint.dev");
+  const [integrationStatus, setIntegrationStatus] = useState({
+    github: false,
+    clickup: false,
+    slack: false,
+    jira: false,
+    linear: false
+  });
+
+  useEffect(() => {
+    const loadUserAndIntegrations = async () => {
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+      if (!user) return;
+
+      setProfileName(user.user_metadata?.full_name || "Developer");
+      setProfileEmail(user.email || "No email");
+
+      try {
+        const [githubRes, clickupRes] = await Promise.all([
+          fetch(`${BACKEND_BASE}/api/github/connection?profileId=${encodeURIComponent(user.id)}`),
+          fetch(`${BACKEND_BASE}/api/clickup/status?profileId=${encodeURIComponent(user.id)}`)
+        ]);
+
+        const githubData = githubRes.ok ? await githubRes.json() : {};
+        const clickupData = clickupRes.ok ? await clickupRes.json() : {};
+
+        setIntegrationStatus((prev) => ({
+          ...prev,
+          github: Boolean(githubData?.connected),
+          clickup: Boolean(clickupData?.isConnected)
+        }));
+      } catch {
+        // keep defaults if backend is unavailable
+      }
+    };
+
+    loadUserAndIntegrations();
+  }, []);
+
+  const integrations = useMemo(() => ([
+    { name: "GitHub", connected: integrationStatus.github },
+    { name: "Jira", connected: integrationStatus.jira },
+    { name: "Slack", connected: integrationStatus.slack },
+    { name: "Linear", connected: integrationStatus.linear },
+    { name: "ClickUp", connected: integrationStatus.clickup },
+  ]), [integrationStatus]);
 
   const handleSave = () => {
     toast({ title: "Settings saved", description: "Your preferences have been updated successfully." });
@@ -119,7 +170,9 @@ export default function Settings() {
                     ) : setting.type === "secret" ? (
                       <code className="text-sm text-text-muted font-mono bg-elevated px-2 py-1 rounded">{setting.value}</code>
                     ) : (
-                      <span className="text-sm text-foreground">{setting.value}</span>
+                      <span className="text-sm text-foreground">
+                        {setting.label === "Display Name" ? profileName : setting.label === "Email" ? profileEmail : setting.value}
+                      </span>
                     )}
                   </div>
                   {i < (section.settings?.length ?? 0) - 1 && <Separator className="bg-border-subtle" />}
@@ -152,18 +205,13 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-1">
-            {[
-              { name: "GitHub", status: "Connected", connected: true },
-              { name: "Jira", status: "Not connected", connected: false },
-              { name: "Slack", status: "Connected", connected: true },
-              { name: "Linear", status: "Not connected", connected: false },
-            ].map((integration, i, arr) => (
+            {integrations.map((integration, i, arr) => (
               <div key={integration.name}>
                 <div className="flex items-center justify-between py-3">
                   <span className="text-sm font-medium text-foreground">{integration.name}</span>
                   <div className="flex items-center gap-3">
                     <Badge className={`border-0 text-xs ${integration.connected ? "bg-green-500/15 text-green-400" : "bg-elevated text-text-muted"}`}>
-                      {integration.status}
+                      {integration.connected ? "Connected" : "Not connected"}
                     </Badge>
                     <ChevronRight className="w-4 h-4 text-text-muted" />
                   </div>

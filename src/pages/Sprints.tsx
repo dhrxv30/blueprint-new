@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { BACKEND_BASE } from "@/lib/config";
 
 interface Task {
   id: string;
@@ -56,7 +57,7 @@ export default function Sprints() {
         let aiStories = [];
 
         if (projectId) {
-          const response = await fetch(`http://localhost:5000/api/projects/${projectId}/analysis`);
+          const response = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/analysis`);
           if (response.ok) {
             const analysis = await response.json();
             aiTasks = Array.isArray(analysis.tasks) ? analysis.tasks : [];
@@ -139,7 +140,7 @@ export default function Sprints() {
     // Persist to backend
     if (projectId) {
       try {
-        await fetch(`http://localhost:5000/api/projects/${projectId}/tasks/${draggedTaskId}/status`, {
+        await fetch(`${BACKEND_BASE}/api/projects/${projectId}/tasks/${draggedTaskId}/status`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: newStatus })
@@ -179,8 +180,17 @@ export default function Sprints() {
 
   const syncToClickUp = async () => {
     try {
-      toast({ title: "Redirecting...", description: "Opening ClickUp integration settings." });
-      navigate(`/dashboard/automation?projectId=${projectId || ""}`);
+      toast({ title: "Syncing...", description: "Pushing tasks to ClickUp sprint board." });
+      const response = await fetch(`${BACKEND_BASE}/api/sync-clickup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "demo-project-123",
+          sprint: { name: "Sprint 1", tasks: tasks.map(t => t.id) }
+        })
+      });
+      if (!response.ok) throw new Error("Sync failed");
+      toast({ title: "Synced", description: "Tasks successfully pushed to ClickUp." });
     } catch (err) {
       toast({
         variant: "destructive",

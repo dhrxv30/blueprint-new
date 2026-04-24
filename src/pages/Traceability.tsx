@@ -33,6 +33,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initialTraceNodes, initialTraceEdges, markerEnd } from "@/data/traceabilityData";
+import { BACKEND_BASE } from "@/lib/config";
 
 interface TraceNodeData extends Record<string, unknown> {
   label: string;
@@ -127,7 +128,7 @@ export default function Traceability() {
     setLoading(true);
     setError(false);
     try {
-      const response = await fetch(`http://localhost:5000/api/projects/${projectId}/traceability`);
+      const response = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/traceability`);
       if (response.ok) {
         const data = await response.json();
         if (data.nodes && data.edges) {
@@ -142,9 +143,13 @@ export default function Traceability() {
     } catch (err) {
       console.error("Traceability fetch error:", err);
       setError(true);
-      // Fallback to mock on error for demo purposes
-      setNodes(initialTraceNodes);
-      setEdges(initialTraceEdges);
+      if (!projectId) {
+        setNodes(initialTraceNodes);
+        setEdges(initialTraceEdges);
+      } else {
+        setNodes([]);
+        setEdges([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -218,7 +223,20 @@ export default function Traceability() {
   };
 
   const handleExport = () => {
-    toast({ title: "Exporting Report", description: "Generating traceability and compliance PDF..." });
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      projectId,
+      nodes,
+      edges
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `traceability-${projectId || "demo"}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Traceability Exported", description: "Downloaded traceability graph as JSON." });
   };
 
   return (
@@ -276,7 +294,11 @@ export default function Traceability() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 p-8 text-center">
                   <AlertCircle className="w-12 h-12 text-red-500/50 mb-4" />
                   <h3 className="text-white font-bold mb-2">Failed to load live data</h3>
-                  <p className="text-zinc-500 text-sm mb-6 max-w-xs">We couldn't connect to the analysis engine. Showing mock data as a fallback.</p>
+                  <p className="text-zinc-500 text-sm mb-6 max-w-xs">
+                    {projectId
+                      ? "We couldn't connect to the analysis engine for this project."
+                      : "We couldn't connect to the analysis engine. Showing demo data for exploration."}
+                  </p>
                   <Button onClick={fetchData} variant="outline" className="border-zinc-800">
                     Retry Connection
                   </Button>

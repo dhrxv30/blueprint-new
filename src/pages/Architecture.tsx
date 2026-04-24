@@ -30,6 +30,7 @@ import dagre from 'dagre';
 // Import Custom Components
 import { UnifiedNode } from "@/components/architecture/UnifiedNode";
 import { LaneNode } from "@/components/architecture/LaneNode";
+import { BACKEND_BASE } from "@/lib/config";
 
 // ==========================================
 // SWIMLANE LAYOUT LOGIC
@@ -184,7 +185,7 @@ function ArchitectureContent() {
     try {
       let architectureData = null;
       if (projectId) {
-        const response = await fetch(`http://localhost:5000/api/projects/${projectId}/architecture`);
+        const response = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/architecture`);
         if (response.ok) architectureData = await response.json();
       }
 

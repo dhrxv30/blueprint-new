@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { calculateCompleteness, calculateComplexity, calculateTimelineWeeks, normalizeHealthScore } from "@/lib/projectMetrics";
 import { ArrowRight, Zap, Target, BarChart3, ListChecks, Clock } from "lucide-react";
+import { BACKEND_BASE } from "@/lib/config";
 
 interface OverviewData {
   name: string;
@@ -48,13 +49,13 @@ export default function Overview() {
         let parsed: any = null;
 
         if (projectId) {
-          const response = await fetch(`http://localhost:5000/api/projects/${projectId}/analysis`);
+          const response = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/analysis`);
           if (response.ok) {
             parsed = await response.json();
           }
         }
 
-        if (!parsed) {
+        if (!projectId && !parsed) {
           const rawData = localStorage.getItem("blueprint_project_data");
           if (rawData) {
             parsed = JSON.parse(rawData);

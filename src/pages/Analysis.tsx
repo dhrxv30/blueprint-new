@@ -55,7 +55,7 @@ export default function Analysis() {
 
     const fetchAnalysis = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/projects/${projectId}/analysis`);
+        const response = await fetch(`${BACKEND_BASE}/api/projects/${projectId}/analysis`);
         if (!response.ok) throw new Error("Failed to fetch analysis");
         const analysis = await response.json();
         
@@ -117,6 +117,28 @@ export default function Analysis() {
     plannedSprints: data.sprints?.length || 0
   });
   const overallComplexity = calculateComplexity(data.tasks || [], data.ambiguities || []);
+  const handleExportReport = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      projectId,
+      summary: {
+        projectName: data.projectName,
+        healthScore: data.healthScore?.score || 0,
+        complexity: overallComplexity,
+        estimatedWeeks
+      },
+      analysis: data
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(data.projectName || "analysis").replace(/\\s+/g, "-").toLowerCase()}-report.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Report Exported", description: "Downloaded analysis report as JSON." });
+  };
 
   return (
     <DashboardLayout>
@@ -129,7 +151,7 @@ export default function Analysis() {
           <Button
             variant="outline"
             className="bg-orange-600 border-orange-700 text-white hover:bg-orange-700"
-            onClick={() => toast({ title: "Exporting Report", description: "Generating PDF analysis report..." })}
+            onClick={handleExportReport}
           >
             Export Report
           </Button>

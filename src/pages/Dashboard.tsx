@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Plus, Clock, FileText, ArrowRight, Activity, ListTodo, RefreshCcw, CheckCircle2, Eye, Badge, Loader2, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase"; 
+import { BACKEND_BASE } from "@/lib/config";
 
 // Keep recent activity mocked for now, or update it later
 const recentActivity = [
@@ -50,7 +51,7 @@ export default function Dashboard() {
     if (user) {
       setUserName(user.user_metadata?.full_name || "Developer");
       try {
-        const res = await fetch(`http://localhost:5000/api/projects?profileId=${user.id}`);
+        const res = await fetch(`${BACKEND_BASE}/api/projects?profileId=${user.id}`);
         if (res.ok) {
           const data = await res.json();
           setProjects(data);
@@ -72,7 +73,7 @@ export default function Dashboard() {
     }
     
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}`, {
+      const res = await fetch(`${BACKEND_BASE}/api/projects/${projectId}`, {
         method: "DELETE"
       });
       if (res.ok) {

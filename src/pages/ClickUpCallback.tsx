@@ -4,15 +4,67 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { BACKEND_BASE } from "@/lib/config";
 
 export default function ClickUpCallback() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // The backend handles the OAuth callback now.
-    // If user reaches this page, redirect to automation.
-    navigate("/dashboard/automation", { replace: true });
-  }, [navigate]);
+    const handleCallback = async () => {
+      const code = searchParams.get("code");
+      
+      if (!code) {
+        toast({
+          variant: "destructive",
+          title: "Connection Failed",
+          description: "No authorization code received from ClickUp."
+        });
+        return navigate("/dashboard/automation");
+      }
+
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          throw new Error("You must be logged in to connect ClickUp.");
+        }
+
+        setStatus("Securing connection...");
+
+        const response = await fetch(`${BACKEND_BASE}/api/clickup/callback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            code,
+            profileId: user.id
+          })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to finalize ClickUp connection.");
+        }
+
+        toast({
+          title: "ClickUp Connected!",
+          description: "Your workspace is now synced.",
+        });
+
+      } catch (error: any) {
+        console.error("ClickUp OAuth Error:", error);
+        toast({
+          variant: "destructive",
+          title: "Connection Error",
+          description: error.message
+        });
+      } finally {
+        navigate("/dashboard/automation");
+      }
+    };
+
+    handleCallback();
+  }, [searchParams, navigate, toast]);
 
   return (
     <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-950 text-white font-satoshi">
