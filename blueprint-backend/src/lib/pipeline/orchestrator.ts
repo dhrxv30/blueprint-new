@@ -384,6 +384,31 @@ Ensure every component in the architecture can be traced back to at least one TA
             await prisma.pipelineAnalysis.create({
                 data: analysisData
             });
+
+            // Seed ambiguities into the Ambiguity table for the chat resolution flow
+            if (healthData.ambiguities && healthData.ambiguities.length > 0) {
+              try {
+                // Convert raw ambiguity strings to proper question objects
+                const ambiguityObjects = healthData.ambiguities.map((a: any, i: number) => ({
+                  id: `amb-${i + 1}`,
+                  description: typeof a === 'string' ? a : a.description || a,
+                  severity: typeof a === 'string' ? 'medium' : (a.severity || 'medium')
+                }));
+                
+                if (ambiguityObjects.length > 0) {
+                  await prisma.ambiguity.createMany({
+                    data: ambiguityObjects.map(a => ({
+                      projectId: job.projectId,
+                      question: a.description,
+                      status: "PENDING"
+                    }))
+                  });
+                  console.log(`  📝 Seeded ${ambiguityObjects.length} ambiguity questions for chat resolution`);
+                }
+              } catch (seedErr) {
+                console.warn("  ⚠️ Failed to seed ambiguity questions (non-fatal):", seedErr);
+              }
+            }
         }
     }
 

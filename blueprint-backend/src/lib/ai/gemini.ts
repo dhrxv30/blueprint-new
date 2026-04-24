@@ -10,7 +10,7 @@ export async function generateJSONResponse<T>(
   systemInstruction: string,
   userPromptOrFile: any,
   responseSchema: Schema,
-  retries: number = 3
+  retries: number = 6
 ): Promise<T> {
 
   if (!ai) {
@@ -60,7 +60,8 @@ export async function generateJSONResponse<T>(
       const isRateLimit = status === 429 || message.toLowerCase().includes("quota");
 
       if ((isRateLimit || status === 503) && attempt < retries) {
-        const delay = attempt * 3000;
+        const delay = attempt * 5000;
+        console.log(`[GEMINI_ENGINE] Retrying in ${delay}ms...`);
         await sleep(delay);
       } else {
         throw error; // Immediate failure for non-transient errors
