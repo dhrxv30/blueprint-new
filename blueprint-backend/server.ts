@@ -1,4 +1,4 @@
-// server.ts - Reloaded for optimization
+// server.ts - Reloaded for optimization 
 
 import express from "express";
 import cors from "cors";
@@ -11,7 +11,9 @@ import { processPrdJob } from "./src/lib/pipeline/orchestrator.js";
 import { createRepo, pushFiles } from "./src/lib/integrations/github.js";
 import { syncSprint } from "./src/lib/integrations/clickup.js";
 import githubRouter from "./src/routes/github.js";
+import clickupRouter from "./src/routes/clickup.js";
 import githubWebhookRouter from "./src/webhooks/githubWebhook.js";
+import clickupWebhookRouter from "./src/webhooks/clickupWebhook.js";
 dotenv.config({ debug: true, override: true });
 
 const app = express();
@@ -51,7 +53,19 @@ const upload = multer({ storage: multer.memoryStorage() });
 ========================================================= */
 
 app.use("/api/github", githubRouter);
+app.use("/api/clickup", clickupRouter);
 app.use("/webhooks", githubWebhookRouter);
+app.use("/webhooks", clickupWebhookRouter);
+
+// Workaround for ClickUp UI bug: intercept truncated redirect URLs at the root
+app.get("/", (req, res) => {
+  if (req.query.code && req.query.state) {
+    const url = new URL("/api/clickup/oauth/callback", `http://localhost:${process.env.PORT || 5000}`);
+    url.search = new URLSearchParams(req.query as any).toString();
+    return res.redirect(url.toString());
+  }
+  return res.send("🚀 Modular Gemini Backend running...");
+});
 
 /**
  * 1. Upload PRD → Run AI pipeline → Save results
@@ -61,10 +75,10 @@ app.post('/api/prd/upload', upload.single('prd'), async (req, res): Promise<any>
     console.log("\n=== INITIATING ASYNC UPLOAD PROCESS ===");
     if (!req.file) return res.status(400).json({ error: 'No PDF uploaded.' });
 
-    const { profileId, projectName, email } = req.body; 
+    const { profileId, projectName, email } = req.body;
 
     if (!profileId) {
-       return res.status(400).json({ error: 'User profileId is required.' });
+      return res.status(400).json({ error: 'User profileId is required.' });
     }
 
     let userProfile = await prisma.profile.findUnique({ where: { id: profileId } });
@@ -91,7 +105,7 @@ app.post('/api/prd/upload', upload.single('prd'), async (req, res): Promise<any>
       }
     });
 
-    const prdVersionId = savedProject.prdVersions[0].id;
+    const prdVersionId = savedProject.prdVersions?.[0]?.id;
 
     const job = await prisma.pipelineJob.create({
       data: {
@@ -99,6 +113,10 @@ app.post('/api/prd/upload', upload.single('prd'), async (req, res): Promise<any>
         status: "PENDING"
       }
     });
+
+    if (!prdVersionId) {
+       return res.status(500).json({ error: "Failed to initialize PRD version mapping." });
+    }
 
     // Trigger background process
     processPrdJob(job.id, prdVersionId).catch(err => {
@@ -127,10 +145,10 @@ app.get("/api/prd/jobs/:jobId/status", async (req, res) => {
   try {
     const job = await prisma.pipelineJob.findUnique({
       where: { id: req.params.jobId },
-      include: { 
-        stages: { 
-          orderBy: { startedAt: "asc" } 
-        } 
+      include: {
+        stages: {
+          orderBy: { startedAt: "asc" }
+        }
       }
     });
     if (!job) return res.status(404).json({ error: "Job not found" });
@@ -146,7 +164,7 @@ app.get("/api/prd/jobs/:jobId/status", async (req, res) => {
 app.get("/api/prd/jobs/:jobId/artifacts/:stageName", async (req, res) => {
   try {
     const stageRun = await prisma.pipelineStageRun.findFirst({
-      where: { 
+      where: {
         jobId: req.params.jobId,
         stageName: req.params.stageName
       },
@@ -178,13 +196,13 @@ app.get("/api/projects/:projectId/analysis", async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
     if (!analysis) return res.status(404).json({ error: "Analysis not found" });
-    
+
     // Inject projectName directly into the response for the frontend
     const responseData = {
       ...analysis,
       projectName: analysis.prdVersion?.project?.name || "Untitled Project"
     };
-    
+
     res.json(responseData);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -239,7 +257,7 @@ app.put("/api/projects/:projectId/tasks/:taskId/status", async (req, res) => {
     }
 
     const tasks = Array.isArray(analysis.tasks) ? (analysis.tasks as any[]) : [];
-    
+
     // Find and update the task
     const taskIndex = tasks.findIndex((t: any) => t.id === taskId || t.taskId === taskId);
     if (taskIndex === -1) {
@@ -415,7 +433,7 @@ app.get("/api/projects", async (req, res) => {
 app.delete("/api/projects/:projectId", async (req, res) => {
   try {
     const { projectId } = req.params;
-    
+
     // Prisma cascading delete will handle removing jobs, versions, etc. if set up correctly
     await prisma.project.delete({
       where: { id: projectId }
@@ -460,7 +478,7 @@ app.post("/api/push-to-github", async (req, res) => {
 app.get("/api/clickup/auth-url", (req, res) => {
   const clientId = process.env.CLICKUP_CLIENT_ID;
   const redirectUri = process.env.CLICKUP_REDIRECT_URI || "http://localhost:5173/auth/clickup/callback";
-  
+
   if (!clientId) {
     return res.status(500).json({ error: "CLICKUP_CLIENT_ID not configured in backend." });
   }
@@ -472,7 +490,7 @@ app.get("/api/clickup/auth-url", (req, res) => {
 app.post("/api/clickup/callback", async (req, res) => {
   try {
     const { code, profileId } = req.body;
-    
+
     if (!code || !profileId) {
       return res.status(400).json({ error: "Authorization code and profileId are required" });
     }
@@ -503,10 +521,16 @@ app.post("/api/clickup/callback", async (req, res) => {
       throw new Error(tokenData.err || "Failed to exchange token with ClickUp");
     }
 
-    // Save token to Profile DB
-    await prisma.profile.update({
-      where: { id: profileId },
-      data: { clickupToken: tokenData.access_token }
+    // Save token to ClickUpConnection table
+    await prisma.clickUpConnection.upsert({
+      where: { profileId },
+      create: {
+        profileId,
+        accessToken: tokenData.access_token
+      },
+      update: {
+        accessToken: tokenData.access_token
+      }
     });
 
     res.json({ success: true, message: "ClickUp connected successfully!" });
@@ -521,11 +545,9 @@ app.get("/api/clickup/status", async (req, res) => {
     const { profileId } = req.query;
     if (!profileId) return res.status(400).json({ error: "profileId required" });
 
-    const profile = await prisma.profile.findUnique({ where: { id: profileId as string } });
-    
-    if (!profile) return res.status(404).json({ error: "Profile not found" });
+    const connection = await prisma.clickUpConnection.findUnique({ where: { profileId: profileId as string } });
 
-    res.json({ isConnected: !!profile.clickupToken });
+    res.json({ isConnected: !!connection });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -539,18 +561,18 @@ app.post("/api/sync-clickup", async (req, res) => {
     const { projectId, profileId, sprint, listId } = req.body;
 
     if (!profileId || !listId) {
-       return res.status(400).json({ error: "profileId and listId are required to sync to ClickUp" });
+      return res.status(400).json({ error: "profileId and listId are required to sync to ClickUp" });
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { id: profileId }
+    const connection = await prisma.clickUpConnection.findUnique({
+      where: { profileId }
     });
 
-    if (!profile || !profile.clickupToken) {
+    if (!connection) {
       return res.status(403).json({ error: "ClickUp is not connected for this user." });
     }
 
-    const result = await syncSprint(listId, sprint, profile.clickupToken);
+    const result = await syncSprint(listId, sprint, connection.accessToken);
 
     res.json({ success: true, result });
 
