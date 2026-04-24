@@ -339,14 +339,7 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
     // Stage 7: Deterministic Post-Processing
     console.log("-> Running Deterministic Post-Processing...");
     const sprints = generateSprints(tasks || []);
-    const traceability = buildTraceability(
-        features || [], 
-        stories || [], 
-        tasks || [], 
-        architecture || null, 
-        codeFiles || [],
-        tests || []
-    );
+    const traceability = buildTraceability(features || [], stories || [], tasks || []);
     const codeStructure = buildFileTree(codeFiles || []);
 
     // Persist final result to PipelineAnalysis (Compatibility layer)
