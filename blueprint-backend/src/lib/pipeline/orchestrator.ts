@@ -273,9 +273,24 @@ Ensure every component in the architecture can be traced back to at least one TA
             },
             required: ["codeFiles", "devops"]
         };
+        const implementationPrompt = `
+${SYSTEM_PROMPTS.CODE_GENERATOR}
+
+PROJECT CONTEXT:
+${normalizedText.slice(0, 4000)}
+
+TASKS TO IMPLEMENT:
+${tasks.map(t => `[${t.id}] ${t.title}: ${t.description}`).join("\n")}
+
+INSTRUCTIONS:
+1. Generate the core codebase files as specified in the 'codeFiles' array.
+2. Generate DevOps artifacts (Dockerfile, GitHub Actions) in the 'devops' object.
+3. Ensure every code file is traced back to a Task ID via a comment.
+        `;
+
         return await routeTask<{ codeFiles: CodeFile[], devops: DevOps }>(
             "Implementation",
-            `Generate production scaffold for these tasks:\n${tasks.map(t=>t.title).slice(0,5).join("\n")}`,
+            implementationPrompt,
             normalizedText,
             schema
         );
