@@ -74,18 +74,29 @@ export default function Chat() {
       const data = await res.json();
 
       if (data.done || !data.ambiguity) {
-        setAllDone(true);
-        setCurrentAmbiguityId(null);
-        // Add a system message
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: "done-" + Date.now(),
-            role: "ai",
-            content: "All ambiguities have been resolved! You can add any additional context below, then click Finalize PRD to re-evaluate.",
-            timestamp: now()
-          }
-        ]);
+        // Double check status before declaring victory
+        const statusRes = await fetch(`${BACKEND_BASE}/api/ambiguities/status?projectId=${projectId}`);
+        const statusData = await statusRes.json();
+        setStatus(statusData);
+        
+        if (statusData.pending === 0 || statusData.allResolved) {
+          setAllDone(true);
+          setCurrentAmbiguityId(null);
+          // Add a system message
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: "done-" + Date.now(),
+              role: "ai",
+              content: "All ambiguities have been resolved! You can add any additional context below, then click Finalize PRD to re-evaluate.",
+              timestamp: now()
+            }
+          ]);
+        } else {
+          // If there are still pending, retry fetch once
+          console.warn("Mismatched state: done reported but pending exists. Retrying...");
+          setTimeout(fetchNextAmbiguity, 1000);
+        }
         return;
       }
 
@@ -113,7 +124,7 @@ export default function Chat() {
       const res = await fetch(`${BACKEND_BASE}/api/ambiguities/status?projectId=${projectId}`);
       const data = await res.json();
       setStatus(data);
-      if (data.allResolved) setAllDone(true);
+      setAllDone(data.allResolved);
     } catch (err) {
       console.error("Failed to fetch status:", err);
     }

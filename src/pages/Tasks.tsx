@@ -88,57 +88,87 @@ export default function Tasks() {
         }
 
         if (aiStories.length > 0 || aiTasks.length > 0) {
-          // 1. Group tasks by their parent User Story
+          // Attempt 1: match tasks to stories by storyId
           const mappedBacklog = aiStories.map((story: any, index: number) => {
-            // Find tasks that belong to this story
-            const storyTasks = aiTasks.filter((t: any) => t.storyId === story.id);
-            
-            // Calculate total points dynamically if the AI didn't provide a total
-            const totalPoints = story.totalPoints || storyTasks.reduce((sum: number, t: any) => sum + (t.points || t.storyPoints || 3), 0);
+            const storyId = story.id || `STORY-${String(index + 1).padStart(3, '0')}`;
 
-            // Safely parse the description/acceptance criteria
-            let parsedDescription = story.description;
-            if (!parsedDescription && story.acceptanceCriteria) {
-              parsedDescription = Array.isArray(story.acceptanceCriteria) 
-                ? story.acceptanceCriteria.join(' • ') 
+            // Try multiple field names for task → story linking
+            const storyTasks = aiTasks.filter((t: any) =>
+              t.storyId === storyId ||
+              t.storyId === story.id ||
+              t.story_id === storyId ||
+              t.userStoryId === storyId
+            );
+
+            // Complexity is the Fibonacci story points field from the AI pipeline
+            const taskPoints = storyTasks.reduce((sum: number, t: any) =>
+              sum + (t.complexity || t.points || t.storyPoints || 3), 0
+            );
+
+            // Stories use 'story' field for the text, not 'title'
+            const storyTitle = story.title || story.name || story.story || "Untitled Story";
+
+            // Description comes from acceptanceCriteria array
+            let description = story.description;
+            if (!description && story.acceptanceCriteria) {
+              description = Array.isArray(story.acceptanceCriteria)
+                ? story.acceptanceCriteria.join(' • ')
                 : story.acceptanceCriteria;
             }
 
             return {
-              id: story.id || `US-${index + 1}`,
-              // THE FIX: Add story.story to the title fallbacks
-              title: story.title || story.name || story.story || "Untitled Story",
-              // THE FIX: Use parsedDescription
-              description: parsedDescription || "No description provided.",
-              totalPoints: totalPoints,
+              id: storyId,
+              title: storyTitle,
+              description: description || "No description provided.",
+              totalPoints: story.totalPoints || story.storyPoints || taskPoints,
               tasks: storyTasks.map((t: any, tIdx: number) => ({
-                id: t.id || t.taskId || `TSK-${index}-${tIdx}`,
-                // THE FIX: Add t.task to the task fallbacks just in case
+                id: t.id || `TSK-${index}-${tIdx}`,
                 title: t.title || t.name || t.task || "Untitled Task",
                 priority: t.priority || "Medium",
                 type: t.type || "Backend",
-                points: t.points || t.storyPoints || 3
+                points: t.complexity || t.points || t.storyPoints || 3
               }))
             };
           });
 
-          // 2. Catch any "Orphaned" tasks that the AI generated without attaching to a specific story
-          const orphanedTasks = aiTasks.filter((t: any) => !aiStories.some((s: any) => s.id === t.storyId));
-          
-          if (orphanedTasks.length > 0) {
-            mappedBacklog.push({
-              id: "US-GENERAL",
-              title: "General Engineering Tasks",
-              description: "Architectural and foundational tasks not tied to a specific user story.",
-              totalPoints: orphanedTasks.reduce((sum: number, t: any) => sum + (t.points || t.storyPoints || 3), 0),
-              tasks: orphanedTasks.map((t: any, tIdx: number) => ({
-                id: t.id || t.taskId || `TSK-GEN-${tIdx}`,
+          // Attempt 2: if storyId matching failed entirely, distribute tasks evenly across stories
+          const totalMatched = mappedBacklog.reduce((sum, s) => sum + s.tasks.length, 0);
+          if (totalMatched === 0 && aiTasks.length > 0 && mappedBacklog.length > 0) {
+            const chunkSize = Math.ceil(aiTasks.length / mappedBacklog.length);
+            mappedBacklog.forEach((story, i) => {
+              const chunk = aiTasks.slice(i * chunkSize, (i + 1) * chunkSize);
+              story.tasks = chunk.map((t: any, tIdx: number) => ({
+                id: t.id || `TSK-${i}-${tIdx}`,
                 title: t.title || t.name || "Untitled Task",
                 priority: t.priority || "Medium",
-                type: t.type || "Infrastructure",
-                points: t.points || t.storyPoints || 3
-              }))
+                type: t.type || "Backend",
+                points: t.complexity || t.points || t.storyPoints || 3
+              }));
+              story.totalPoints = story.tasks.reduce((s, t) => s + t.points, 0);
             });
+          }
+
+          // Orphaned tasks: any not matched in attempt 1 (skip if we used attempt 2)
+          if (totalMatched > 0) {
+            const matchedIds = new Set(
+              mappedBacklog.flatMap(s => s.tasks.map(t => t.id))
+            );
+            const orphanedTasks = aiTasks.filter((t: any) => !matchedIds.has(t.id));
+            if (orphanedTasks.length > 0) {
+              mappedBacklog.push({
+                id: "US-GENERAL",
+                title: "General Engineering Tasks",
+                description: "Foundational tasks not tied to a specific user story.",
+                totalPoints: orphanedTasks.reduce((sum: number, t: any) => sum + (t.complexity || t.points || 3), 0),
+                tasks: orphanedTasks.map((t: any, tIdx: number) => ({
+                  id: t.id || `TSK-GEN-${tIdx}`,
+                  title: t.title || t.name || "Untitled Task",
+                  priority: t.priority || "Medium",
+                  type: t.type || "Infrastructure",
+                  points: t.complexity || t.points || 3
+                }))
+              });
+            }
           }
 
           setBacklogStories(mappedBacklog);

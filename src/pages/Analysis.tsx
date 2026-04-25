@@ -16,7 +16,7 @@ interface ParsedData {
   features: any[];
   stories: any[];
   tasks: any[];
-  healthScore: { score: number; issues: string[] };
+  healthScore: { score: number; issues: string[]; complexity?: number; completeness?: number; timeline?: number };
   ambiguities?: any[];
   clarifications?: any[];
   architecture?: any;
@@ -71,7 +71,12 @@ export default function Analysis() {
           features: Array.isArray(analysis.features) ? analysis.features : [],
           stories: Array.isArray(analysis.stories) ? analysis.stories : [],
           tasks: Array.isArray(analysis.tasks) ? analysis.tasks : [],
-          healthScore: { score: finalHealthScore, issues: analysis.healthScore?.issues || extractedAmbiguities },
+          // Spread the FULL healthScore so complexity/timeline/completeness are preserved
+          healthScore: {
+            ...(typeof analysis.healthScore === 'object' ? analysis.healthScore : {}),
+            score: finalHealthScore,
+            issues: analysis.healthScore?.issues || extractedAmbiguities,
+          },
           ambiguities: extractedAmbiguities,
           clarifications: Array.isArray(analysis.clarifications) ? analysis.clarifications : [],
           architecture: typeof analysis.architecture === 'string' ? JSON.parse(analysis.architecture) : (analysis.architecture || { nodes: [], edges: [] }),
@@ -113,11 +118,26 @@ export default function Analysis() {
   }
 
   const totalTasks = data.tasks?.length || 0;
-  const estimatedWeeks = calculateTimelineWeeks(data.tasks || [], {
-    ambiguities: data.ambiguities || [],
-    plannedSprints: data.sprints?.length || 0
-  });
-  const overallComplexity = calculateComplexity(data.tasks || [], data.ambiguities || []);
+
+  // Read AI-generated values from healthScore JSON first (same source as Overview page)
+  const hs = data.healthScore as any;
+  const aiComplexity   = typeof hs?.complexity === 'number' && hs.complexity > 0 ? hs.complexity : null;
+  const aiTimeline     = typeof hs?.timeline   === 'number' && hs.timeline   > 0 ? hs.timeline   : null;
+
+  // Complexity: map AI 1-10 → label, or fall back to local calculation
+  const overallComplexity = aiComplexity !== null
+    ? (aiComplexity <= 3 ? 'Low' : aiComplexity <= 6 ? 'Medium' : 'High')
+    : calculateComplexity(data.tasks || [], data.ambiguities || []);
+
+  // Timeline: use AI weeks directly, or fall back to local point-velocity estimate
+  const estimatedWeeks = aiTimeline !== null
+    ? aiTimeline
+    : calculateTimelineWeeks(data.tasks || [], {
+        ambiguities: data.ambiguities || [],
+        plannedSprints: data.sprints?.length || 0
+      });
+
+  const complexitySource = aiComplexity !== null ? 'AI evaluated' : `derived from ${totalTasks} tasks`;
   const handleExportReport = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -250,7 +270,7 @@ export default function Analysis() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-white mb-1">{overallComplexity}</div>
-              <p className="text-xs text-zinc-500">Derived from {totalTasks} tasks.</p>
+              <p className="text-xs text-zinc-500">{complexitySource}.</p>
             </CardContent>
           </Card>
 
