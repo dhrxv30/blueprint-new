@@ -211,11 +211,23 @@ export async function pushSprintToClickUp(input: {
 
   const token = await getClickUpTokenForProfile(profileId);
 
-  // 1. Create a new list in ClickUp
-  const newList = await createListInClickUp(token, sprintName, spaceId, folderId);
-  const listId = newList.id;
-  const listName = newList.name;
-  console.log("[ClickUp] Created list:", listId, listName);
+  // 1. Get or create a list in ClickUp
+  const existingLists = await fetchLists(token, spaceId, folderId);
+  const existingList = existingLists.find((l: any) => l.name === sprintName);
+
+  let listId: string;
+  let listName: string;
+
+  if (existingList) {
+    console.log("[ClickUp] Using existing list:", existingList.id, existingList.name);
+    listId = existingList.id;
+    listName = existingList.name;
+  } else {
+    const newList = await createListInClickUp(token, sprintName, spaceId, folderId);
+    listId = newList.id;
+    listName = newList.name;
+    console.log("[ClickUp] Created list:", listId, listName);
+  }
 
   // 2. Fetch sprint tasks from our DB
   const analysis = await prisma.pipelineAnalysis.findFirst({
@@ -271,14 +283,37 @@ export async function pushSprintToClickUp(input: {
       const localStatus = task.status || "todo";
       const clickupStatus = mapStatusToClickUp(localStatus);
 
-      const created = await createTaskInClickUp(token, listId, {
-        name: taskName,
-        description: taskDesc,
-        status: clickupStatus,
+      // Check if task already mapped
+      const existingMapping = await prisma.clickUpTaskMapping.findUnique({
+        where: {
+          clickupMappingId_localTaskId: {
+            clickupMappingId: mapping.id,
+            localTaskId: String(localTaskId),
+          },
+        },
       });
 
+      let clickupTaskId: string;
+
+      if (existingMapping) {
+        console.log("[ClickUp] Task already mapped, updating:", existingMapping.clickupTaskId);
+        await updateTaskInClickUp(token, existingMapping.clickupTaskId, {
+          name: taskName,
+          description: taskDesc,
+          status: clickupStatus,
+        });
+        clickupTaskId = existingMapping.clickupTaskId;
+      } else {
+        const created = await createTaskInClickUp(token, listId, {
+          name: taskName,
+          description: taskDesc,
+          status: clickupStatus,
+        });
+        clickupTaskId = created?.id;
+      }
+
       // Save task mapping
-      if (created?.id && localTaskId) {
+      if (clickupTaskId && localTaskId) {
         await prisma.clickUpTaskMapping.upsert({
           where: {
             clickupMappingId_localTaskId: {
@@ -286,11 +321,11 @@ export async function pushSprintToClickUp(input: {
               localTaskId: String(localTaskId),
             },
           },
-          update: { clickupTaskId: created.id },
+          update: { clickupTaskId },
           create: {
             clickupMappingId: mapping.id,
             localTaskId: String(localTaskId),
-            clickupTaskId: created.id,
+            clickupTaskId: clickupTaskId,
           },
         });
       }
