@@ -23,15 +23,22 @@ router.get("/ambiguities/next", async (req, res) => {
     const { projectId } = req.query;
     if (!projectId) return res.status(400).json({ error: "projectId is required" });
 
-    let ambiguity = await (prisma as any).ambiguity.findFirst({
-      where: {
-        projectId: projectId as string,
-        status: "PENDING"
-      },
-      orderBy: { createdAt: "asc" }
-    });
+    console.log(`[Ambiguity] Fetching next for project: ${projectId}`);
 
+    // Using raw query to be absolutely sure about UUID matching and status
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "Ambiguity" 
+       WHERE "projectId" = $1::uuid 
+       AND status != 'RESOLVED' 
+       ORDER BY "createdAt" ASC 
+       LIMIT 1`,
+      projectId
+    );
+
+    let ambiguity = rows && rows.length > 0 ? rows[0] : null;
+    
     if (!ambiguity) {
+      console.log(`[Ambiguity] No pending found via raw SQL. Checking total...`);
       // Check if we have ANY ambiguities at all (including RESOLVED)
       const totalCount = await (prisma as any).ambiguity.count({
         where: { projectId: projectId as string }
@@ -102,23 +109,37 @@ router.post("/ambiguities/answer", async (req, res) => {
       return res.status(400).json({ error: "ambiguityId and answer are required" });
     }
 
-    const updated = await (prisma as any).ambiguity.update({
-      where: { id: ambiguityId },
-      data: { answer, status: "RESOLVED" }
-    });
+    // Move to raw update since Prisma client is stale
+    await prisma.$executeRawUnsafe(
+      `UPDATE "Ambiguity" SET answer = $1, status = 'RESOLVED' WHERE id = $2::uuid`,
+      answer,
+      ambiguityId
+    );
 
-    // Fetch the next pending ambiguity for convenience
-    const next = await (prisma as any).ambiguity.findFirst({
-      where: {
-        projectId: updated.projectId,
-        status: "PENDING"
-      },
-      orderBy: { createdAt: "asc" }
-    });
+    // Get the projectId for logging/fetching next
+    const currentRows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "projectId" FROM "Ambiguity" WHERE id = $1::uuid`,
+      ambiguityId
+    );
+    const projectId = currentRows[0]?.projectId;
+    console.log(`[Ambiguity] Answered ${ambiguityId} for project ${projectId}. Searching for next...`);
+
+    // Fetch the next pending ambiguity for convenience using raw
+    const nextRows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "Ambiguity" 
+       WHERE "projectId" = $1::uuid
+       AND status != 'RESOLVED' 
+       ORDER BY "createdAt" ASC 
+       LIMIT 1`,
+      projectId
+    );
+
+    const next = nextRows && nextRows.length > 0 ? nextRows[0] : null;
+    console.log(`[Ambiguity] Next question found: ${next?.id || 'NONE'}`);
 
     res.json({
       success: true,
-      resolved: updated,
+      resolved: { id: ambiguityId, answer, status: 'RESOLVED', projectId },
       next: next || null,
       done: !next
     });
@@ -137,12 +158,17 @@ router.get("/ambiguities/status", async (req, res) => {
     const { projectId } = req.query;
     if (!projectId) return res.status(400).json({ error: "projectId is required" });
 
-    const total = await (prisma as any).ambiguity.count({
-      where: { projectId: projectId as string }
-    });
-    const resolved = await (prisma as any).ambiguity.count({
-      where: { projectId: projectId as string, status: "RESOLVED" }
-    });
+    const totalRows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*)::int as count FROM "Ambiguity" WHERE "projectId" = $1::uuid`,
+      projectId
+    );
+    const resolvedRows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*)::int as count FROM "Ambiguity" WHERE "projectId" = $1::uuid AND status = 'RESOLVED'`,
+      projectId
+    );
+
+    const total = totalRows[0]?.count || 0;
+    const resolved = resolvedRows[0]?.count || 0;
 
     res.json({
       total,
@@ -202,21 +228,22 @@ router.post("/prd/finalize", async (req, res) => {
     }
     const originalPrd = latestVersion.parsedText || "";
 
-    // 2. Fetch all resolved Q&A
-    const resolvedAmbiguities = await (prisma as any).ambiguity.findMany({
-      where: { projectId, status: "RESOLVED" }
-    });
+    // 2. Fetch all resolved Q&A using raw SQL
+    const resolvedAmbiguities = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT question, answer FROM "Ambiguity" WHERE "projectId" = $1::uuid AND status = 'RESOLVED'`,
+      projectId
+    );
     const qnaList = resolvedAmbiguities.map((a: any, i: number) => ({
       id: i + 1,
       question: a.question,
       answer: a.answer || ""
     }));
 
-    // 3. Fetch context notes
-    const contextNotes = await (prisma as any).contextNote.findMany({
-      where: { projectId },
-      orderBy: { createdAt: "desc" }
-    });
+    // 3. Fetch context notes using raw SQL
+    const contextNotes = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT content FROM "ContextNote" WHERE "projectId" = $1::uuid ORDER BY "createdAt" DESC`,
+      projectId
+    );
     const contextText = contextNotes.map((n: any) => n.content).join("\n");
 
     // 4. Fetch existing analysis

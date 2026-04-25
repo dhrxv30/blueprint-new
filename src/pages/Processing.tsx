@@ -10,13 +10,14 @@ import { useToast } from "@/hooks/use-toast";
 import { BACKEND_BASE } from "@/lib/config";
 
 const stepsConfig = [
-  { name: "Ingest & Normalize", icon: FileSearch, stage: "Ingest & Normalize" },
-  { name: "Feature Extraction", icon: ShieldCheck, stage: "Feature Extraction" },
-  { name: "User Story Generation", icon: FileSearch, stage: "User Story Generation" },
-  { name: "Task Planning", icon: ListTodo, stage: "Task Planning" },
-  { name: "Architecture Synthesis", icon: Network, stage: "Architecture Synthesis" },
-  { name: "Implementation Details", icon: Code2, stage: "Implementation Details" },
-  { name: "Test Planning", icon: TestTube2, stage: "Test Planning" },
+  { name: "Ingest & Normalize",         icon: FileSearch,  stage: "Ingest & Normalize" },
+  { name: "Feature Extraction",         icon: ShieldCheck, stage: "Feature Extraction" },
+  { name: "User Story Generation",      icon: FileSearch,  stage: "User Story Generation" },
+  { name: "Task Planning",              icon: ListTodo,    stage: "Task Planning" },
+  { name: "Architecture Synthesis",     icon: Network,     stage: "Architecture Synthesis" },
+  { name: "Implementation Details",     icon: Code2,       stage: "Implementation Details" },
+  { name: "Test Planning",              icon: TestTube2,   stage: "Test Planning" },
+  { name: "Health & Ambiguity Analysis",icon: ShieldCheck, stage: "Health & Ambiguity Analysis" },
 ];
 
 interface Stage {

@@ -7,6 +7,7 @@ import { SYSTEM_PROMPTS } from "../ai/prompts.js";
 import { buildTraceability } from "./traceabilityGenerator.js";
 import { generateSprints } from "./sprintPlanner.js";
 import { runPythonPdfParser } from "./pythonBridge.js";
+import { evaluatePRD } from "./prdHealthScore.js";
 
 const prisma = new PrismaClient({
   datasources: {
@@ -187,7 +188,7 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
       return await routeTask<{ tasks: Task[] }>(
         "Tasks",
         SYSTEM_PROMPTS.TASK_GENERATOR,
-        stories.map(s => `Story: ${s.story}\nCriteria: ${s.acceptanceCriteria.join(", ")}`).join("\n\n"),
+        stories.map(s => `StoryID: ${s.id}\nStory: ${s.story}\nCriteria: ${s.acceptanceCriteria.join(", ")}`).join("\n\n"),
         schema
       );
     });
@@ -200,8 +201,6 @@ export async function processPrdJob(jobId: string, prdVersionId: string) {
     }
     const tasks = taskResult.data!.tasks;
 
-    // Parallel Stages: Architecture Synthesis, Implementation Details, Test Planning, Health Analysis
-    console.log("-> Launching parallel generation for Architecture, Implementation, Testing, and Health Analysis...");
     // Parallel Stages: Architecture Synthesis, Implementation Details, Test Planning, Health Analysis
     console.log("-> Launching parallel generation for Architecture, Implementation, Testing, and Health Analysis...");
     
@@ -383,27 +382,32 @@ For each task, provide at least one positive (happy path) and one negative (erro
       }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<any>)),
 
       runStage<PRDHealth>(jobId, "Health & Ambiguity Analysis", async () => {
-        const schema: Schema = {
-            type: Type.OBJECT,
-            properties: {
-                healthScore: {
-                    type: Type.OBJECT,
-                    properties: {
-                        score: { type: Type.INTEGER },
-                        issues: { type: Type.ARRAY, items: { type: Type.STRING } }
-                    },
-                    required: ["score", "issues"]
-                },
-                ambiguities: { type: Type.ARRAY, items: { type: Type.STRING } }
+        // Pass task/story counts so the AI can produce an accurate timeline
+        const totalComplexity = tasks.reduce((s, t) => s + (t.complexity || 3), 0);
+        const evalContext = `PRD TEXT:
+${normalizedText.slice(0, 5000)}
+
+PIPELINE METRICS (use these for timeline & completeness scoring):
+- Features: ${features.length}
+- User Stories: ${stories.length}
+- Engineering Tasks: ${tasks.length}
+- Total Story Points: ${totalComplexity}
+- Avg Task Complexity: ${tasks.length > 0 ? (totalComplexity / tasks.length).toFixed(1) : 'N/A'}`;
+
+        const evaluation = await evaluatePRD(evalContext);
+        return {
+          status: "success",
+          data: {
+            healthScore: {
+              score:        evaluation.healthScore,
+              complexity:   evaluation.complexity,
+              completeness: evaluation.completeness,
+              timeline:     evaluation.timelineWeeks,
+              issues:       evaluation.issues,
             },
-            required: ["healthScore", "ambiguities"]
+            ambiguities: evaluation.ambiguities,
+          }
         };
-        return await routeTask<PRDHealth>(
-            "HealthAnalysis",
-            SYSTEM_PROMPTS.PRD_HEALTH_ANALYZER,
-            normalizedText,
-            schema
-        );
       }).catch(e => ({ status: "failed", errors: [e.message] } as StageOutput<PRDHealth>))
     ]);
 

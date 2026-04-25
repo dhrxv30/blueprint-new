@@ -34,14 +34,24 @@ function getDependencyCount(tasks: TaskLike[] = []): number {
 }
 
 export function normalizeHealthScore(rawHealthScore: unknown, ambiguities: unknown[] = [], completeness = 0): number {
-  const directScore = typeof rawHealthScore === "number"
-    ? rawHealthScore
-    : (rawHealthScore as { score?: number } | null)?.score;
+  // New format: { healthScore, complexity, completeness, timeline, issues, ambiguities }
+  // Old format: { score, issues }
+  // Also could just be a plain number
+  let directScore: number | undefined;
 
-  if (typeof directScore === "number" && Number.isFinite(directScore) && directScore > 0) {
+  if (typeof rawHealthScore === 'number') {
+    directScore = rawHealthScore;
+  } else if (rawHealthScore && typeof rawHealthScore === 'object') {
+    const hs = rawHealthScore as Record<string, unknown>;
+    // new evaluatePRD format stores it as 'score' (we write score: evaluation.healthScore)
+    directScore = typeof hs.score === 'number' ? hs.score : undefined;
+  }
+
+  if (typeof directScore === 'number' && Number.isFinite(directScore) && directScore > 0) {
     return clamp(Math.round(directScore), 0, 100);
   }
 
+  // Graceful fallback from local signals
   const ambiguityPenalty = ambiguities.length * 4;
   const completenessBonus = Math.round(completeness * 0.12);
   return clamp(70 + completenessBonus - ambiguityPenalty, 10, 92);

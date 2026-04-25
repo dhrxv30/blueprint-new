@@ -65,26 +65,44 @@ export default function Overview() {
         if (parsed) {
           // Safely extract arrays
           const aiFeatures = Array.isArray(parsed.features) ? parsed.features : [];
-          const aiTasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
-          const aiStories = Array.isArray(parsed.stories) ? parsed.stories : [];
-          const aiSprints = Array.isArray(parsed.sprints) ? parsed.sprints : [];
+          const aiTasks    = Array.isArray(parsed.tasks)    ? parsed.tasks    : [];
+          const aiStories  = Array.isArray(parsed.stories)  ? parsed.stories  : [];
+          const aiSprints  = Array.isArray(parsed.sprints)  ? parsed.sprints  : [];
           const aiAmbiguities = Array.isArray(parsed.ambiguities) ? parsed.ambiguities : [];
 
-          const completeness = calculateCompleteness(parsed);
-          const calculatedComplexity = calculateComplexity(aiTasks, aiAmbiguities);
-          const estimatedWeeks = calculateTimelineWeeks(aiTasks, {
-            ambiguities: aiAmbiguities,
-            plannedSprints: aiSprints.length
-          });
+          // The AI evaluator stores complexity, completeness & timeline inside healthScore JSON
+          const hs = parsed.healthScore ?? {};
+          const aiComplexity   = typeof hs === 'object' ? (hs.complexity   ?? null) : null;
+          const aiCompleteness = typeof hs === 'object' ? (hs.completeness ?? null) : null;
+          const aiTimeline     = typeof hs === 'object' ? (hs.timeline     ?? null) : null;
+
+          // -- Completeness: use AI value if present, else fall back to local check --
+          const completeness = (typeof aiCompleteness === 'number' && aiCompleteness > 0)
+            ? Math.round(aiCompleteness)
+            : calculateCompleteness(parsed);
+
+          // -- Complexity: map AI 1-10 score to Low/Medium/High, or use local calc --
+          let complexityLabel: string;
+          if (typeof aiComplexity === 'number' && aiComplexity > 0) {
+            complexityLabel = aiComplexity <= 3 ? 'Low' : aiComplexity <= 6 ? 'Medium' : 'High';
+          } else {
+            complexityLabel = calculateComplexity(aiTasks, aiAmbiguities);
+          }
+
+          // -- Timeline: use AI weeks directly if present, else use local estimate --
+          const timelineWeeks = (typeof aiTimeline === 'number' && aiTimeline > 0)
+            ? Math.round(aiTimeline)
+            : calculateTimelineWeeks(aiTasks, { ambiguities: aiAmbiguities, plannedSprints: aiSprints.length });
+
           const finalHealthScore = normalizeHealthScore(parsed.healthScore, aiAmbiguities, completeness);
 
-          // Safely format features (handling both string and object responses from Gemini)
+          // Safely format features
           const formattedFeatures = aiFeatures.map((f: any, i: number) => {
             if (typeof f === 'string') {
               return {
                 id: `feat-${i}`,
                 name: f,
-                stories: Math.max(1, Math.floor(aiStories.length / Math.max(aiFeatures.length, 1))), // Estimate distribution
+                stories: Math.max(1, Math.floor(aiStories.length / Math.max(aiFeatures.length, 1))),
                 tasks: Math.max(1, Math.floor(aiTasks.length / Math.max(aiFeatures.length, 1))),
                 complexity: "Medium"
               };
@@ -103,8 +121,8 @@ export default function Overview() {
             description: "Strategic engineering blueprint synthesized from your product requirements. Our engine has architected a high-fidelity roadmap across features, user stories, and technical execution tasks.",
             healthScore: finalHealthScore,
             completeness,
-            complexity: calculatedComplexity,
-            timeline: `${estimatedWeeks} Weeks`,
+            complexity: complexityLabel,
+            timeline: `${timelineWeeks} Weeks`,
             features: formattedFeatures,
             stats: {
               features: aiFeatures.length,
